@@ -61,19 +61,19 @@ function Overview() {
     <div className="bg-background">
       <section className="relative overflow-hidden border-b border-border bg-background">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_18%_8%,oklch(0.76_0.17_145_/_0.18),transparent_34%),radial-gradient(ellipse_at_88%_34%,oklch(0.78_0.19_145_/_0.14),transparent_36%)]" />
-        <div className="container-page py-20 lg:py-24">
-          <div className="relative grid gap-12 lg:grid-cols-[1fr_440px] lg:items-center">
+        <div className="container-page py-14 sm:py-20 lg:py-24">
+          <div className="relative grid gap-10 lg:grid-cols-[1fr_440px] lg:items-center">
             <div>
               <div className="inline-flex items-center gap-2 rounded-md border border-primary/20 bg-card/80 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-elegant">
                 <HeartPulse className="h-3.5 w-3.5 text-accent" />
                 Health assistant in your pocket
               </div>
 
-              <h1 className="mt-6 max-w-3xl text-balance text-5xl font-extrabold leading-[1.05] text-foreground sm:text-6xl">
+              <h1 className="mt-6 max-w-3xl text-balance text-4xl font-extrabold leading-[1.08] text-foreground sm:text-5xl lg:text-6xl">
                 Understand symptoms earlier. Make clearer health decisions.
               </h1>
 
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
+              <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
                 Curable helps people explain symptoms, answer the right follow-up questions, and
                 prepare better summaries for professional care.
               </p>
@@ -100,11 +100,11 @@ function Overview() {
         </div>
       </section>
 
-      <section id="what-curable-does" className="container-page py-20">
+      <section id="what-curable-does" className="container-page py-14 sm:py-20">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <span className="text-sm font-semibold text-accent">What Curable does</span>
-            <h2 className="mt-3 max-w-2xl text-4xl font-bold leading-tight text-foreground">
+            <h2 className="mt-3 max-w-2xl text-3xl font-bold leading-tight text-foreground sm:text-4xl">
               Practical support before, during, and after a care decision.
             </h2>
           </div>
@@ -114,7 +114,7 @@ function Overview() {
           </p>
         </div>
 
-        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {capabilities.map(({ icon: Icon, title, body }) => (
             <article
               key={title}
@@ -131,11 +131,11 @@ function Overview() {
       </section>
 
       <section className="border-y border-border bg-surface">
-        <div className="container-page py-20">
+        <div className="container-page py-14 sm:py-20">
           <div className="grid gap-10 lg:grid-cols-[360px_1fr]">
             <div>
               <span className="text-sm font-semibold text-accent">How it works</span>
-              <h2 className="mt-3 text-3xl font-bold leading-tight text-foreground">
+              <h2 className="mt-3 text-2xl font-bold leading-tight text-foreground sm:text-3xl">
                 A focused flow that avoids overwhelming the patient.
               </h2>
             </div>
@@ -157,15 +157,15 @@ function Overview() {
         </div>
       </section>
 
-      <section className="container-page py-20">
-        <div className="rounded-lg border border-primary/10 bg-card p-8 shadow-elegant md:p-10">
+      <section className="container-page py-14 sm:py-20">
+        <div className="rounded-lg border border-primary/10 bg-card p-6 shadow-elegant md:p-10">
           <div className="grid gap-6 md:grid-cols-[64px_1fr] md:items-start">
             <div className="flex h-14 w-14 items-center justify-center rounded-md bg-accent/10 text-accent">
               <Stethoscope className="h-6 w-6" />
             </div>
             <div>
               <span className="text-sm font-semibold text-accent">Responsible by design</span>
-              <h2 className="mt-2 max-w-3xl text-3xl font-bold leading-tight text-foreground">
+              <h2 className="mt-2 max-w-3xl text-2xl font-bold leading-tight text-foreground sm:text-3xl">
                 Curable supports better health decisions but does not replace professional medical
                 care.
               </h2>
@@ -178,9 +178,9 @@ function Overview() {
         </div>
       </section>
 
-      <section className="container-page pb-20">
-        <div className="rounded-lg border border-primary/20 bg-surface p-8 text-center shadow-elegant md:p-12">
-          <h2 className="mx-auto max-w-2xl text-3xl font-bold leading-tight text-foreground">
+      <section className="container-page pb-14 sm:pb-20">
+        <div className="rounded-lg border border-primary/20 bg-surface p-6 text-center shadow-elegant md:p-12">
+          <h2 className="mx-auto max-w-2xl text-2xl font-bold leading-tight text-foreground sm:text-3xl">
             Start understanding your symptoms earlier.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
@@ -201,7 +201,7 @@ function Overview() {
 
 function CarePreview() {
   return (
-    <div className="rounded-lg border border-primary/20 bg-card/95 p-5 shadow-deep">
+    <div className="rounded-lg border border-primary/20 bg-card/95 p-4 shadow-deep sm:p-5">
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -224,7 +224,7 @@ function CarePreview() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-md border border-primary/10 p-4">
             <p className="text-xs text-muted-foreground">Possible cause</p>
             <p className="mt-1 text-sm font-semibold text-foreground">Viral illness</p>

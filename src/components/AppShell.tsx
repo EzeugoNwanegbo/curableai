@@ -111,9 +111,10 @@ export function AppShell() {
   }
 
   const nav = auth.role === "doctor" ? doctorNav : patientNav;
+  const mobileNav = nav.slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20 lg:pb-0">
       <aside className="fixed left-0 top-0 hidden h-screen w-72 flex-col border-r border-border bg-card/90 px-5 py-7 shadow-elegant backdrop-blur lg:flex">
         <Link to="/" className="mb-10 flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-lg font-extrabold text-primary-foreground shadow-elegant">
@@ -175,6 +176,28 @@ export function AppShell() {
       <main className="lg:pl-72">
         <Outlet />
       </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-2 py-2 shadow-deep backdrop-blur lg:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+          {mobileNav.map(({ to, label, icon: Icon }) => {
+            const active = location.pathname === to;
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-semibold transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="max-w-full truncate">{label.replace("AI Follow-up", "Chat")}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

@@ -425,10 +425,10 @@ function ChatPage() {
   }
 
   return (
-    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[1fr_360px]">
+    <div className="grid min-h-[calc(100vh-5rem)] grid-cols-1 lg:min-h-screen lg:grid-cols-[1fr_360px]">
       {/* Conversation */}
-      <div className="flex h-screen flex-col border-r border-border">
-        <header className="flex items-center justify-between border-b border-border bg-card px-8 py-5">
+      <div className="flex h-[calc(100vh-5rem)] flex-col border-r border-border lg:h-screen">
+        <header className="flex flex-col gap-4 border-b border-border bg-card px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:py-5">
           <div>
             <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
               Page 01
@@ -437,7 +437,7 @@ function ChatPage() {
               AI Follow-up · {patient.name}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {doctorConnection?.doctorName ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />{" "}
@@ -474,10 +474,13 @@ function ChatPage() {
           </div>
         </header>
 
-        <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto px-8 py-8">
+        <div
+          ref={scrollRef}
+          className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
+        >
           {messages.map((m) => (
             <div key={m.id} className={m.role === "patient" ? "flex justify-end" : ""}>
-              <div className={`max-w-[78%] ${m.role === "patient" ? "" : "w-full"}`}>
+              <div className={`${m.role === "patient" ? "max-w-[88%] sm:max-w-[78%]" : "w-full"}`}>
                 {m.doctorReview ? (
                   <DoctorReviewCard update={m.doctorReview} time={m.time} />
                 ) : (
@@ -585,7 +588,7 @@ function ChatPage() {
                 </p>
               ) : null}
 
-              <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
                   This sends the report to {doctorConnection?.doctorName || "your selected doctor"}.
                   Doctor consultation will be a separate room.
@@ -608,7 +611,10 @@ function ChatPage() {
           ) : null}
         </div>
 
-        <form className="border-t border-border bg-card px-8 py-4" onSubmit={handleSend}>
+        <form
+          className="border-t border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-4"
+          onSubmit={handleSend}
+        >
           <div className="flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
             <input
               value={input}

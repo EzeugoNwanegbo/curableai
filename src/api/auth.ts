@@ -17,7 +17,12 @@ function fallbackName(email?: string | null) {
   return email?.split("@")[0]?.replace(/[._-]+/g, " ") || "Curable Patient";
 }
 
-async function upsertProfileMemoryFact(client: any, patientId: string, label: string, details?: string) {
+async function upsertProfileMemoryFact(
+  client: any,
+  patientId: string,
+  label: string,
+  details?: string,
+) {
   const cleaned = details?.trim();
   if (!cleaned) return;
 
@@ -53,7 +58,11 @@ async function upsertProfileMemoryFact(client: any, patientId: string, label: st
   if (error) throw error;
 }
 
-async function saveStructuredProfileMemory(client: any, patientId: string, input: { genotype?: string; occupation?: string }) {
+async function saveStructuredProfileMemory(
+  client: any,
+  patientId: string,
+  input: { genotype?: string; occupation?: string },
+) {
   await Promise.all([
     upsertProfileMemoryFact(client, patientId, "Genotype", input.genotype),
     upsertProfileMemoryFact(client, patientId, "Occupation", input.occupation),
@@ -109,10 +118,16 @@ export const ensurePatientAccount = createServerFn({
     if (age && existing.age !== age) updates.age = age;
     if (sex && existing.sex !== sex) updates.sex = sex;
     if (bloodGroup && existing.blood_group !== bloodGroup) updates.blood_group = bloodGroup;
-    if (allergies.length && JSON.stringify(existing.allergies || []) !== JSON.stringify(allergies)) {
+    if (
+      allergies.length &&
+      JSON.stringify(existing.allergies || []) !== JSON.stringify(allergies)
+    ) {
       updates.allergies = allergies;
     }
-    if (conditions.length && JSON.stringify(existing.conditions || []) !== JSON.stringify(conditions)) {
+    if (
+      conditions.length &&
+      JSON.stringify(existing.conditions || []) !== JSON.stringify(conditions)
+    ) {
       updates.conditions = conditions;
     }
 
@@ -135,16 +150,19 @@ export const ensurePatientAccount = createServerFn({
 
   const { data: inserted, error: insertError } = await client
     .from("patients")
-    .insert({
-      id: user.id,
-      full_name: fullName,
-      age: age || 0,
-      sex,
-      blood_group: bloodGroup,
-      allergies,
-      conditions,
-      pinned_by_doctor: "",
-    })
+    .upsert(
+      {
+        id: user.id,
+        full_name: fullName,
+        age: age || 0,
+        sex,
+        blood_group: bloodGroup,
+        allergies,
+        conditions,
+        pinned_by_doctor: "",
+      },
+      { onConflict: "id" },
+    )
     .select("id, full_name, age, sex, blood_group, allergies, conditions, pinned_by_doctor")
     .single();
 
@@ -163,18 +181,19 @@ export const getPatientProfileState = createServerFn({
   const { supabase, supabaseAdmin } = await import("@/lib/supabase");
   const client = supabaseAdmin || supabase;
 
-  const [{ data: patient, error: patientError }, { data: memories, error: memoryError }] = await Promise.all([
-    client
-      .from("patients")
-      .select("id, full_name, age, sex, blood_group, allergies, conditions, pinned_by_doctor")
-      .eq("id", patientId)
-      .single(),
-    client
-      .from("memory_snapshots")
-      .select("*")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: false }),
-  ]);
+  const [{ data: patient, error: patientError }, { data: memories, error: memoryError }] =
+    await Promise.all([
+      client
+        .from("patients")
+        .select("id, full_name, age, sex, blood_group, allergies, conditions, pinned_by_doctor")
+        .eq("id", patientId)
+        .single(),
+      client
+        .from("memory_snapshots")
+        .select("*")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false }),
+    ]);
 
   if (patientError) throw patientError;
   if (memoryError) throw memoryError;
