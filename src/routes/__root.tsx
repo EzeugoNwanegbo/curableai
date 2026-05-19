@@ -44,12 +44,18 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
-            onClick={() => { router.invalidate(); reset(); }}
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             Try again
           </button>
-          <a href="/" className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground">
+          <a
+            href="/"
+            className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+          >
             Overview
           </a>
         </div>
@@ -72,14 +78,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "Curable - Context-Aware Health Reasoning" },
       {
         property: "og:description",
-        content: "Persistent medical memory, medication context, structured reports, and optional doctor validation.",
+        content:
+          "Persistent medical memory, medication context, structured reports, and optional doctor validation.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Curable - Context-Aware Health Reasoning" },
-      { name: "description", content: "An AI-assisted healthcare platform for safer health decisions and continuous care." },
-      { property: "og:description", content: "An AI-assisted healthcare platform for safer health decisions and continuous care." },
-      { name: "twitter:description", content: "An AI-assisted healthcare platform for safer health decisions and continuous care." },
+      {
+        name: "description",
+        content:
+          "An AI-assisted healthcare platform for safer health decisions and continuous care.",
+      },
+      {
+        property: "og:description",
+        content:
+          "An AI-assisted healthcare platform for safer health decisions and continuous care.",
+      },
+      {
+        name: "twitter:description",
+        content:
+          "An AI-assisted healthcare platform for safer health decisions and continuous care.",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -87,7 +106,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
       },
     ],
   }),
@@ -99,7 +118,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <HeadContent />
       </head>

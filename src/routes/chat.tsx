@@ -1,8 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Send, Sparkles, ShieldAlert, BookmarkCheck, Loader2, Brain, Pill, UserRound, FileText, X, Stethoscope, CheckCircle2, MessageSquare, BarChart3, ChevronDown } from "lucide-react";
-import { RiskBadge } from "@/components/RiskBadge";
-import { createDoctorReviewReport, getPatientChatState, sendDoctorReviewReport, sendMessage } from "@/api/chat";
+import {
+  Send,
+  Sparkles,
+  ShieldAlert,
+  BookmarkCheck,
+  Loader2,
+  Brain,
+  Pill,
+  UserRound,
+  FileText,
+  X,
+  Stethoscope,
+  CheckCircle2,
+  MessageSquare,
+  BarChart3,
+  ChevronDown,
+} from "lucide-react";
+import {
+  createDoctorReviewReport,
+  getPatientChatState,
+  sendDoctorReviewReport,
+  sendMessage,
+} from "@/api/chat";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
@@ -10,7 +30,11 @@ export const Route = createFileRoute("/chat")({
   head: () => ({
     meta: [
       { title: "AI Follow-up · Curable" },
-      { name: "description", content: "Patient AI assistant with persistent medical memory and optional doctor validation." },
+      {
+        name: "description",
+        content:
+          "Patient AI assistant with persistent medical memory and optional doctor validation.",
+      },
     ],
   }),
   component: ChatPage,
@@ -65,6 +89,7 @@ interface ReasoningSnapshot {
   concernSummary: string;
   timeline?: ReasoningTimelineItem[];
   nextQuestion?: string;
+  uncertaintyGaps?: string[];
   conditions: ReasoningCondition[];
   stewardship?: ReasoningStewardship;
   usedContext?: ReasoningUsedContext;
@@ -111,7 +136,13 @@ function mapDbMessage(m: any): Message {
 
   return {
     id: m.id,
-    role: isDoctorReview ? "doctor" : m.role === "patient" ? "patient" : m.role === "doctor" ? "doctor" : "ai",
+    role: isDoctorReview
+      ? "doctor"
+      : m.role === "patient"
+        ? "patient"
+        : m.role === "doctor"
+          ? "doctor"
+          : "ai",
     text: m.content,
     time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     risk: metadata?.escalation?.risk,
@@ -136,7 +167,9 @@ function ChatPage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
-  const [patient, setPatient] = useState<{ id: string; name: string; pinned?: string } | null>(null);
+  const [patient, setPatient] = useState<{ id: string; name: string; pinned?: string } | null>(
+    null,
+  );
   const [doctorConnection, setDoctorConnection] = useState<DoctorConnection | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isCreatingReport, setIsCreatingReport] = useState(false);
@@ -154,7 +187,7 @@ function ChatPage() {
         .slice()
         .reverse()
         .find((message) => message.reasoning?.conditions?.length),
-    [messages]
+    [messages],
   );
 
   // 1. Initialize Patient & Fetch Data
@@ -169,7 +202,11 @@ function ChatPage() {
         const pDetails = state.patient;
 
         if (pDetails) {
-          setPatient({ id: patientId, name: pDetails.full_name, pinned: pDetails.pinned_by_doctor });
+          setPatient({
+            id: patientId,
+            name: pDetails.full_name,
+            pinned: pDetails.pinned_by_doctor,
+          });
         } else {
           setPatient({
             id: patientId,
@@ -191,8 +228,11 @@ function ChatPage() {
               label: m.label,
               layer: m.layer,
               details: m.details,
-              since: new Date(m.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-            }))
+              since: new Date(m.created_at).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              }),
+            })),
           );
         }
       } catch (err: any) {
@@ -210,7 +250,12 @@ function ChatPage() {
       .channel(`doctor_review_cards_${patient.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `patient_id=eq.${patient.id}` },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `patient_id=eq.${patient.id}`,
+        },
         (payload) => {
           const row: any = payload.new;
           if (row?.metadata?.type !== "doctor_review_card") return;
@@ -219,7 +264,7 @@ function ChatPage() {
             if (prev.some((message) => message.id === row.id)) return prev;
             return [...prev, mapDbMessage(row)];
           });
-        }
+        },
       )
       .subscribe();
 
@@ -269,7 +314,9 @@ function ChatPage() {
           risk: aiResponse.risk,
           reasoning: aiResponse.reasoning as ReasoningSnapshot | null,
           actions: aiResponse.memoriesAdded?.length
-            ? [`${aiResponse.memoriesAdded.length} memory fact${aiResponse.memoriesAdded.length === 1 ? "" : "s"} saved to profile`]
+            ? [
+                `${aiResponse.memoriesAdded.length} memory fact${aiResponse.memoriesAdded.length === 1 ? "" : "s"} saved to profile`,
+              ]
             : undefined,
         },
       ]);
@@ -284,8 +331,11 @@ function ChatPage() {
             label: m.label,
             layer: m.layer,
             details: m.details,
-            since: new Date(m.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-          }))
+            since: new Date(m.created_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            }),
+          })),
         );
       }
     } catch (err) {
@@ -301,10 +351,9 @@ function ChatPage() {
       setReportError("Add a validating doctor in Consultation before creating a doctor report.");
       return;
     }
-    const reason =
-      latestReasoningMessage?.reasoning?.concernSummary
-        ? `Patient requested doctor validation of Curable's latest reasoning: ${latestReasoningMessage.reasoning.concernSummary}`
-        : "Patient is requesting doctor review of the current AI conversation and recent health concern.";
+    const reason = latestReasoningMessage?.reasoning?.concernSummary
+      ? `Patient requested doctor validation of Curable's latest reasoning: ${latestReasoningMessage.reasoning.concernSummary}`
+      : "Patient is requesting doctor review of the current AI conversation and recent health concern.";
 
     setIsCreatingReport(true);
     setReportSent(false);
@@ -354,7 +403,7 @@ function ChatPage() {
         <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
         <h2 className="font-serif text-2xl text-foreground mb-2">Initialization Failed</h2>
         <p className="text-muted-foreground max-w-md mb-6">{error}</p>
-        <button 
+        <button
           onClick={() => window.location.reload()}
           className="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-accent"
         >
@@ -381,17 +430,23 @@ function ChatPage() {
       <div className="flex h-screen flex-col border-r border-border">
         <header className="flex items-center justify-between border-b border-border bg-card px-8 py-5">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Page 01</div>
-            <h1 className="mt-1 font-serif text-xl text-foreground">AI Follow-up · {patient.name}</h1>
+            <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              Page 01
+            </div>
+            <h1 className="mt-1 font-serif text-xl text-foreground">
+              AI Follow-up · {patient.name}
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             {doctorConnection?.doctorName ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" /> {doctorConnection.doctorName} supervising
+                <span className="h-1.5 w-1.5 rounded-full bg-success" />{" "}
+                {doctorConnection.doctorName} supervising
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" /> No validating doctor
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" /> No validating
+                doctor
               </span>
             )}
             {doctorConnection?.doctorName ? (
@@ -401,7 +456,11 @@ function ChatPage() {
                 disabled={isCreatingReport}
                 className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10"
               >
-                {isCreatingReport ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {isCreatingReport ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FileText className="h-3.5 w-3.5" />
+                )}
                 {isCreatingReport ? "Preparing report" : "Request doctor review"}
               </button>
             ) : (
@@ -423,35 +482,38 @@ function ChatPage() {
                   <DoctorReviewCard update={m.doctorReview} time={m.time} />
                 ) : (
                   <>
-                {m.role === "ai" && (
-                  <div className="mb-1.5 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <Sparkles className="h-3 w-3 text-gold" /> Curable AI · {m.time}
-                  </div>
-                )}
-                <div
-                  className={`rounded-lg px-4 py-3 text-sm leading-relaxed ${
-                    m.role === "patient"
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-card text-card-foreground"
-                  }`}
-                >
-                  {m.text}
-                </div>
-                {m.actions?.length ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {m.actions.map((action) => (
-                      <span
-                        key={action}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-[11px] font-medium text-gold-foreground"
-                      >
-                        <Brain className="h-3 w-3" /> {action}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                {m.reasoning && expandedReasoningId === m.id ? (
-                  <ReasoningDetailCard reasoning={m.reasoning} onClose={() => setExpandedReasoningId(null)} />
-                ) : null}
+                    {m.role === "ai" && (
+                      <div className="mb-1.5 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <Sparkles className="h-3 w-3 text-gold" /> Curable AI · {m.time}
+                      </div>
+                    )}
+                    <div
+                      className={`rounded-lg px-4 py-3 text-sm leading-relaxed ${
+                        m.role === "patient"
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border bg-card text-card-foreground"
+                      }`}
+                    >
+                      {m.text}
+                    </div>
+                    {m.actions?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {m.actions.map((action) => (
+                          <span
+                            key={action}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-[11px] font-medium text-gold-foreground"
+                          >
+                            <Brain className="h-3 w-3" /> {action}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {m.reasoning && expandedReasoningId === m.id ? (
+                      <ReasoningDetailCard
+                        reasoning={m.reasoning}
+                        onClose={() => setExpandedReasoningId(null)}
+                      />
+                    ) : null}
                   </>
                 )}
               </div>
@@ -467,7 +529,10 @@ function ChatPage() {
           {reportError ? (
             <div className="rounded-md border border-gold/40 bg-gold/10 p-3 text-sm leading-relaxed text-foreground">
               {reportError}{" "}
-              <Link to="/consultation" className="font-medium text-accent underline underline-offset-4">
+              <Link
+                to="/consultation"
+                className="font-medium text-accent underline underline-offset-4"
+              >
                 Add doctor
               </Link>
             </div>
@@ -480,7 +545,9 @@ function ChatPage() {
                   <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
                     <FileText className="h-3 w-3 text-primary" /> Doctor report preview
                   </div>
-                  <h2 className="mt-1 font-serif text-lg text-foreground">{doctorReport.doctorQuestion}</h2>
+                  <h2 className="mt-1 font-serif text-lg text-foreground">
+                    {doctorReport.doctorQuestion}
+                  </h2>
                 </div>
                 <button
                   type="button"
@@ -497,7 +564,6 @@ function ChatPage() {
                   <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                     Situation summary
                   </span>
-                  <RiskBadge level={doctorReport.risk as any} />
                 </div>
                 <p className="text-sm leading-relaxed text-foreground">{doctorReport.summary}</p>
               </div>
@@ -521,7 +587,8 @@ function ChatPage() {
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
-                  This sends the report to {doctorConnection?.doctorName || "your selected doctor"}. Doctor consultation will be a separate room.
+                  This sends the report to {doctorConnection?.doctorName || "your selected doctor"}.
+                  Doctor consultation will be a separate room.
                 </p>
                 <button
                   type="button"
@@ -529,7 +596,11 @@ function ChatPage() {
                   disabled={isSendingReport || reportSent}
                   className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
                 >
-                  {isSendingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {isSendingReport ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                   {reportSent ? "Sent to doctor" : "Send to doctor"}
                 </button>
               </div>
@@ -537,10 +608,7 @@ function ChatPage() {
           ) : null}
         </div>
 
-        <form
-          className="border-t border-border bg-card px-8 py-4"
-          onSubmit={handleSend}
-        >
+        <form className="border-t border-border bg-card px-8 py-4" onSubmit={handleSend}>
           <div className="flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
             <input
               value={input}
@@ -555,7 +623,11 @@ function ChatPage() {
               className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-accent disabled:opacity-50"
               aria-label="Send"
             >
-              {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </button>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
@@ -622,9 +694,15 @@ function ChatPage() {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-foreground">{s.label}</span>
-                        <span className="font-mono text-[10px] text-muted-foreground">{s.since}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {s.since}
+                        </span>
                       </div>
-                      {s.details ? <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{s.details}</p> : null}
+                      {s.details ? (
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                          {s.details}
+                        </p>
+                      ) : null}
                     </li>
                   ))}
                 {memories.filter((s) => s.layer === layer).length === 0 ? (
@@ -655,7 +733,9 @@ function ReasoningBars({ conditions }: { conditions: ReasoningCondition[] }) {
         <div key={`${condition.name}-${index}`}>
           <div className="mb-1 flex items-center justify-between gap-3 text-xs">
             <span className="truncate font-medium text-foreground">{condition.name}</span>
-            <span className="shrink-0 text-[10px] text-muted-foreground">{condition.matchLabel}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground">
+              {condition.matchLabel}
+            </span>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-muted">
             <div
@@ -726,13 +806,28 @@ function LiveReasoningPanel({
       </p>
 
       <div className="mt-5">
-        {hasReasoning ? <ReasoningBars conditions={reasoning!.conditions} /> : <ReasoningSkeleton />}
+        {hasReasoning ? (
+          <ReasoningBars conditions={reasoning!.conditions} />
+        ) : (
+          <ReasoningSkeleton />
+        )}
       </div>
 
       {reasoning?.concernSummary ? (
         <p className="mt-4 rounded-md border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-foreground">
           {reasoning.concernSummary}
         </p>
+      ) : null}
+
+      {reasoning?.uncertaintyGaps?.length ? (
+        <div className="mt-3 rounded-md border border-border bg-background px-3 py-2">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Details still being narrowed
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            {reasoning.uncertaintyGaps.slice(0, 3).join(" · ")}
+          </p>
+        </div>
       ) : null}
 
       {reasoning?.stewardship?.nextAction ? (
@@ -798,7 +893,10 @@ function ReasoningDetailCard({
           </div>
           <ol className="grid gap-2 md:grid-cols-2">
             {reasoning.timeline.map((item, index) => (
-              <li key={`${item.event}-${index}`} className="rounded-md border border-border bg-background p-3">
+              <li
+                key={`${item.event}-${index}`}
+                className="rounded-md border border-border bg-background p-3"
+              >
                 <div className="text-sm font-medium text-foreground">{item.event}</div>
                 <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   {item.whenText || "Time unclear"}
@@ -818,15 +916,36 @@ function ReasoningDetailCard({
         <ReasoningBars conditions={reasoning.conditions} />
       </div>
 
+      {reasoning.uncertaintyGaps?.length ? (
+        <div className="mt-5 rounded-md border border-border bg-surface p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Uncertainty gaps
+          </div>
+          <ul className="mt-2 space-y-1.5">
+            {reasoning.uncertaintyGaps.map((item) => (
+              <li key={item} className="text-xs leading-relaxed text-muted-foreground">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         {reasoning.conditions.map((condition, index) => (
-          <div key={`${condition.name}-support-${index}`} className="rounded-md border border-border bg-background p-3">
+          <div
+            key={`${condition.name}-support-${index}`}
+            className="rounded-md border border-border bg-background p-3"
+          >
             <div className="text-sm font-medium text-foreground">{condition.name}</div>
             <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
               Why it is being considered
             </div>
             <ul className="mt-2 space-y-1.5">
-              {(condition.support?.length ? condition.support : ["Curable needs more answers before explaining this clearly."]).map((item) => (
+              {(condition.support?.length
+                ? condition.support
+                : ["Curable needs more answers before explaining this clearly."]
+              ).map((item) => (
                 <li key={item} className="text-xs leading-relaxed text-muted-foreground">
                   {item}
                 </li>
@@ -836,7 +955,10 @@ function ReasoningDetailCard({
               What weakens it
             </div>
             <ul className="mt-2 space-y-1.5">
-              {(condition.weakens?.length ? condition.weakens : ["Curable has not found a clear weakening detail yet."]).map((item) => (
+              {(condition.weakens?.length
+                ? condition.weakens
+                : ["Curable has not found a clear weakening detail yet."]
+              ).map((item) => (
                 <li key={item} className="text-xs leading-relaxed text-muted-foreground">
                   {item}
                 </li>
@@ -855,7 +977,9 @@ function ReasoningDetailCard({
             {reasoning.nextQuestion || "No extra question chosen for this step."}
           </p>
           {reasoning.stewardship?.reason ? (
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{reasoning.stewardship.reason}</p>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {reasoning.stewardship.reason}
+            </p>
           ) : null}
         </div>
 
@@ -879,7 +1003,11 @@ function ContextUsedList({ context }: { context?: ReasoningUsedContext }) {
   ].slice(0, 6);
 
   if (!items.length) {
-    return <p className="mt-1 text-xs leading-relaxed text-muted-foreground">No specific saved context was needed yet.</p>;
+    return (
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        No specific saved context was needed yet.
+      </p>
+    );
   }
 
   return (
@@ -899,19 +1027,23 @@ function DoctorReviewCard({ update, time }: { update: DoctorReviewUpdate; time: 
   return (
     <div
       className={`rounded-lg border p-5 shadow-elegant ${
-        needsConsultation
-          ? "border-accent/40 bg-accent/5"
-          : "border-success/30 bg-success/10"
+        needsConsultation ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/10"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${
-              needsConsultation ? "bg-accent text-primary-foreground" : "bg-success text-primary-foreground"
+              needsConsultation
+                ? "bg-accent text-primary-foreground"
+                : "bg-success text-primary-foreground"
             }`}
           >
-            {needsConsultation ? <MessageSquare className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+            {needsConsultation ? (
+              <MessageSquare className="h-4 w-4" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -961,7 +1093,10 @@ function ReportReasoningSnapshot({ reasoning }: { reasoning: ReasoningSnapshot }
       {reasoning.timeline?.length ? (
         <div className="mt-4 grid gap-2 md:grid-cols-2">
           {reasoning.timeline.slice(0, 4).map((item, index) => (
-            <div key={`${item.event}-${index}`} className="rounded border border-border bg-surface px-3 py-2">
+            <div
+              key={`${item.event}-${index}`}
+              className="rounded border border-border bg-surface px-3 py-2"
+            >
               <div className="text-xs font-medium text-foreground">{item.event}</div>
               <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                 {item.whenText || "Time unclear"}
@@ -978,7 +1113,9 @@ function ReportReasoningSnapshot({ reasoning }: { reasoning: ReasoningSnapshot }
 function ReportList({ title, items }: { title: string; items?: string[] }) {
   return (
     <div className="rounded-md border border-border bg-background p-3">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{title}</div>
+      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {title}
+      </div>
       {items?.length ? (
         <ul className="mt-2 space-y-1.5">
           {items.map((item, index) => (

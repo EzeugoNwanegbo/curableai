@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Activity, Loader2, LogIn, Stethoscope, UserRound } from "lucide-react";
+import { Loader2, LogIn, Stethoscope, UserRound } from "lucide-react";
 import { ensurePatientAccount } from "@/api/auth";
 import { getUserRole, useAuth, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -105,7 +105,11 @@ function AuthPage() {
           });
         }
 
-        setNotice(data.session ? "Account created. Opening your workspace..." : "Account created. Check your email to confirm your login.");
+        setNotice(
+          data.session
+            ? "Account created. Opening your workspace..."
+            : "Account created. Check your email to confirm your login.",
+        );
 
         if (data.session) {
           void navigate({ to: role === "doctor" ? "/doctor" : "/chat" });
@@ -135,8 +139,8 @@ function AuthPage() {
         <section className="flex flex-col justify-between border-r border-border bg-surface px-8 py-8">
           <div>
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <Activity className="h-5 w-5" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-lg font-extrabold text-primary-foreground">
+                C
               </div>
               <div>
                 <div className="font-serif text-xl text-foreground">Curable</div>
@@ -179,7 +183,11 @@ function AuthPage() {
         </section>
 
         <main className="flex items-center justify-center px-6 py-10">
-          <form noValidate onSubmit={handleSubmit} className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-elegant">
+          <form
+            noValidate
+            onSubmit={handleSubmit}
+            className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-elegant"
+          >
             <div className="flex rounded-md border border-border bg-muted p-1">
               <button
                 type="button"
@@ -206,7 +214,9 @@ function AuthPage() {
                 {mode === "signin" ? "Welcome back" : "Create your workspace"}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {mode === "signin" ? "Use your Curable account details." : "Choose whether this account is for a patient or doctor."}
+                {mode === "signin"
+                  ? "Use your Curable account details."
+                  : "Choose whether this account is for a patient or doctor."}
               </p>
             </div>
 
@@ -216,7 +226,9 @@ function AuthPage() {
                   type="button"
                   onClick={() => setRole("patient")}
                   className={`rounded-md border px-3 py-3 text-left text-sm ${
-                    role === "patient" ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground"
+                    role === "patient"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-foreground"
                   }`}
                 >
                   <UserRound className="h-4 w-4" />
@@ -226,7 +238,9 @@ function AuthPage() {
                   type="button"
                   onClick={() => setRole("doctor")}
                   className={`rounded-md border px-3 py-3 text-left text-sm ${
-                    role === "doctor" ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground"
+                    role === "doctor"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-foreground"
                   }`}
                 >
                   <Stethoscope className="h-4 w-4" />
@@ -316,11 +330,13 @@ function AuthPage() {
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
                       >
                         <option value="">Select</option>
-                        {["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-", "Unknown"].map((group) => (
-                          <option key={group} value={group}>
-                            {group === "Unknown" ? "I don't know yet" : group}
-                          </option>
-                        ))}
+                        {["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-", "Unknown"].map(
+                          (group) => (
+                            <option key={group} value={group}>
+                              {group === "Unknown" ? "I don't know yet" : group}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </label>
                     <label className="text-sm">
@@ -363,7 +379,11 @@ function AuthPage() {
               disabled={isSubmitting}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-accent disabled:opacity-60"
             >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogIn className="h-4 w-4" />
+              )}
               {mode === "signin" ? "Sign in" : "Create account"}
             </button>
           </form>

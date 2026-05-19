@@ -2,6 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { readDoctorConnection } from "@/api/doctor-connection";
 import { fetchMedicationsForPatient } from "@/api/medications";
+import {
+  buildPatientState,
+  runDifferentialEngine,
+  type DifferentialResult,
+} from "@/lib/differential-engine";
 
 const memoryLayerNames: Record<number, string> = {
   1: "Structured health fact",
@@ -56,6 +61,12 @@ function normalizeUsedContext(value: any) {
   };
 }
 
+function normalizeUncertaintyGaps(value: any) {
+  return toStringArray(value)
+    .slice(0, 6)
+    .map((item) => item.slice(0, 120));
+}
+
 function normalizeStewardship(value: any, nextQuestion: string) {
   const allowedActions = [
     "ask_one_question",
@@ -91,30 +102,38 @@ function normalizeReasoning(value: any) {
   const nextQuestion = String(value.nextQuestion || "").slice(0, 180);
 
   const conditions = rawConditions
-        .slice(0, 4)
-        .map((condition: any) => {
-          const score = Number(condition?.score);
-          const normalizedScore = Number.isFinite(score) ? Math.min(95, Math.max(5, Math.round(score))) : 20;
-          const matchLabel = conditionLabels.includes(condition?.matchLabel)
-            ? condition.matchLabel
-            : labelForScore(normalizedScore);
+    .slice(0, 4)
+    .map((condition: any) => {
+      const score = Number(condition?.score);
+      const normalizedScore = Number.isFinite(score)
+        ? Math.min(95, Math.max(5, Math.round(score)))
+        : 20;
+      const matchLabel = conditionLabels.includes(condition?.matchLabel)
+        ? condition.matchLabel
+        : labelForScore(normalizedScore);
 
-          return {
-            name: String(condition?.name || "Needs more information").slice(0, 80),
-            score: normalizedScore,
-            matchLabel,
-            support: toStringArray(condition?.support || condition?.supports).slice(0, 3),
-            weakens: toStringArray(condition?.weakens || condition?.challenge || condition?.against).slice(0, 3),
-          };
-        })
-        .filter((condition: any) => condition.name);
+      return {
+        name: String(condition?.name || "Needs more information").slice(0, 80),
+        score: normalizedScore,
+        matchLabel,
+        support: toStringArray(condition?.support || condition?.supports).slice(0, 3),
+        weakens: toStringArray(
+          condition?.weakens || condition?.challenge || condition?.against,
+        ).slice(0, 3),
+      };
+    })
+    .filter((condition: any) => condition.name);
 
   return {
-    readiness: value.readiness === "ready" || value.stage === "reasoning_ready" ? "ready" : "collecting",
+    readiness:
+      value.readiness === "ready" || value.stage === "reasoning_ready" ? "ready" : "collecting",
     stage: value.stage === "reasoning_ready" ? "reasoning_ready" : "collecting",
     concernSummary: String(value.concernSummary || "Building symptom picture.").slice(0, 240),
     timeline: normalizeTimeline(value.timeline),
     nextQuestion,
+    uncertaintyGaps: normalizeUncertaintyGaps(
+      value.uncertaintyGaps || value.missingInformation || value.unknowns,
+    ),
     conditions,
     stewardship: normalizeStewardship(value.stewardship, nextQuestion),
     usedContext: normalizeUsedContext(value.usedContext),
@@ -146,16 +165,120 @@ function stripClinicalTags(content: string) {
     .trim();
 }
 
+function buildEngineTaggedResponse(message: string, patient: any, patientMedications: any[]) {
+  const state = buildPatientState({
+    message,
+    patient: {
+      age: Number(patient.age) || undefined,
+      sex: patient.sex,
+    },
+    medications: patientMedications.map((m) => m.name),
+    country: "Nigeria",
+  });
+  const result = runDifferentialEngine(state);
+
+  if (!state.concepts.length) return null;
+
+  const reasoning = {
+    readiness: result.nextQuestion ? "collecting" : "ready",
+    stage: result.nextQuestion ? "collecting" : "reasoning_ready",
+    concernSummary: result.concernSummary,
+    timeline: [
+      {
+        event: `${state.concepts.map((concept) => concept.replace(/_/g, " ")).join(", ")} reported`,
+        whenText: state.modifiers.durationMentioned
+          ? "timing partly mentioned by patient"
+          : "timing not yet known",
+        estimatedDate: "",
+        certainty: state.modifiers.durationMentioned ? "user_reported" : "unknown",
+        source: "chat_message",
+      },
+    ],
+    nextQuestion: result.nextQuestion?.text || "",
+    uncertaintyGaps: result.uncertaintyGaps,
+    conditions: result.possibleConditions,
+    stewardship: {
+      nextAction: actionForEngineResult(result),
+      reason:
+        result.nextQuestion?.rationale ||
+        "Curable has enough detail to summarize the current pattern.",
+      shouldOfferDoctorValidation: result.careLevel === "clinician_today",
+      shouldWarnUrgentCare: result.careLevel === "urgent_now",
+      shouldStopQuestioning: result.careLevel === "urgent_now" || !result.nextQuestion,
+    },
+    usedContext: {
+      profile: [`${patient.full_name}, ${patient.age}y, ${patient.sex}`],
+      medications: patientMedications.map((m) => m.name).slice(0, 3),
+      memory: [],
+      conversation: ["Current symptom report"],
+    },
+  };
+
+  const visibleReply = visibleEngineReply(result);
+
+  return `${visibleReply}${reasoningTag(reasoning)}
+
+[SIGNAL: Adaptive symptom report | 3 | Patient said: ${message}]
+[ESCALATE: ${riskForEngineResult(result)} | Adaptive differential engine result | ${recommendationForEngineResult(result)}]`;
+}
+
+function visibleEngineReply(result: DifferentialResult) {
+  if (result.careLevel === "urgent_now") {
+    return "This combination is important to check promptly. Please seek urgent medical care now, especially if symptoms are worsening.";
+  }
+
+  if (result.nextQuestion) {
+    return `Okay, let's narrow this down carefully. ${result.nextQuestion.text}`;
+  }
+
+  const top = result.possibleConditions[0];
+  if (!top) return "I hear you. When did this start?";
+
+  return `Based on what you've shared, ${top.name.toLowerCase()} is the strongest current pattern. I can prepare this clearly for a doctor if you want review.`;
+}
+
+function actionForEngineResult(result: DifferentialResult) {
+  if (result.careLevel === "urgent_now") return "urgent_care_warning";
+  if (result.nextQuestion) return "ask_one_question";
+  if (result.careLevel === "clinician_today") return "suggest_doctor_validation";
+  return "update_reasoning";
+}
+
+function riskForEngineResult(result: DifferentialResult) {
+  if (result.careLevel === "urgent_now") return "emergency";
+  if (result.careLevel === "clinician_today") return "high";
+  if (result.careLevel === "self_care_guidance") return "low";
+  return "low";
+}
+
+function recommendationForEngineResult(result: DifferentialResult) {
+  if (result.careLevel === "urgent_now") return "Seek urgent medical evaluation now";
+  if (result.nextQuestion) return "Continue adaptive symptom questioning";
+  return "Summarize possible causes and offer doctor review";
+}
+
 function buildFallbackTaggedResponse(message: string, patient: any, patientMedications: any[]) {
   const lower = message.toLowerCase();
   const matchedMedication = patientMedications.find((m) => lower.includes(m.name.toLowerCase()));
-  const emergencyTerms = ["chest pain", "trouble breathing", "shortness of breath", "faint", "stroke", "numbness", "suicidal"];
+  const emergencyTerms = [
+    "chest pain",
+    "trouble breathing",
+    "shortness of breath",
+    "faint",
+    "stroke",
+    "numbness",
+    "suicidal",
+  ];
   const isEmergency = emergencyTerms.some((term) => lower.includes(term));
-  const hasFever = lower.includes("fever") || lower.includes("temperature") || lower.includes("hot body");
+  const hasFever =
+    lower.includes("fever") || lower.includes("temperature") || lower.includes("hot body");
   const hasHeadache = lower.includes("headache") || lower.includes("head pain");
-  const hasBodyPain = lower.includes("body pain") || lower.includes("body ache") || lower.includes("aches");
-  const hasNausea = lower.includes("nausea") || lower.includes("nauseous") || lower.includes("vomit");
+  const hasBodyPain =
+    lower.includes("body pain") || lower.includes("body ache") || lower.includes("aches");
+  const hasNausea =
+    lower.includes("nausea") || lower.includes("nauseous") || lower.includes("vomit");
   const hasDuration = /yesterday|today|hour|day|week|started|since/i.test(message);
+  const engineResponse = buildEngineTaggedResponse(message, patient, patientMedications);
 
   if (isEmergency) {
     const reasoning = {
@@ -202,6 +325,10 @@ function buildFallbackTaggedResponse(message: string, patient: any, patientMedic
 [ESCALATE: emergency | Urgent symptom reported by patient | Seek immediate medical evaluation]`;
   }
 
+  if (engineResponse) {
+    return engineResponse;
+  }
+
   if (hasNausea && matchedMedication) {
     const reasoning = {
       readiness: "collecting",
@@ -222,7 +349,10 @@ function buildFallbackTaggedResponse(message: string, patient: any, patientMedic
           name: `${matchedMedication.name} timing effect`,
           score: 64,
           matchLabel: "Possible match",
-          support: ["Nausea can be related to medication timing.", `${matchedMedication.name} is currently listed in your medications.`],
+          support: [
+            "Nausea can be related to medication timing.",
+            `${matchedMedication.name} is currently listed in your medications.`,
+          ],
           weakens: ["The timing relative to the dose is not confirmed yet."],
         },
         {
@@ -242,7 +372,8 @@ function buildFallbackTaggedResponse(message: string, patient: any, patientMedic
       ],
       stewardship: {
         nextAction: "ask_one_question",
-        reason: "Medication timing is the highest-value detail to separate medication effect from food or infection.",
+        reason:
+          "Medication timing is the highest-value detail to separate medication effect from food or infection.",
         shouldOfferDoctorValidation: false,
         shouldWarnUrgentCare: false,
         shouldStopQuestioning: false,
@@ -339,13 +470,18 @@ function buildFallbackTaggedResponse(message: string, patient: any, patientMedic
           source: "chat_message",
         },
       ],
-      nextQuestion: hasDuration ? "Has the fever been constant, or does it come and go?" : "When did it start?",
+      nextQuestion: hasDuration
+        ? "Has the fever been constant, or does it come and go?"
+        : "When did it start?",
       conditions: [
         {
           name: "Malaria",
           score: hasFever && (hasHeadache || hasBodyPain) ? 68 : 48,
           matchLabel: hasFever && (hasHeadache || hasBodyPain) ? "Possible match" : "Partial match",
-          support: ["Fever with headache or body pain can fit malaria patterns.", "Regional context can matter."],
+          support: [
+            "Fever with headache or body pain can fit malaria patterns.",
+            "Regional context can matter.",
+          ],
           weakens: ["Chills, sweating, test result, and exposure details are not known yet."],
         },
         {
@@ -405,7 +541,9 @@ function buildFallbackTaggedResponse(message: string, patient: any, patientMedic
         name: "Needs more symptom detail",
         score: 20,
         matchLabel: "Needs more information",
-        support: ["Curable needs timing, severity, and symptom details before comparing explanations."],
+        support: [
+          "Curable needs timing, severity, and symptom details before comparing explanations.",
+        ],
         weakens: ["There is not enough symptom detail yet to compare explanations."],
       },
     ],
@@ -461,8 +599,12 @@ function formatReasoningSnapshotForReport(snapshot: any) {
 
   return [
     `Reasoning snapshot concern: ${snapshot.concernSummary}`,
-    timelineLines.length ? `Timeline: ${timelineLines.join(" | ")}` : "Timeline: no clear timeline captured yet.",
-    conditionLines.length ? `Possible explanations: ${conditionLines.join(" | ")}` : "Possible explanations: not enough information yet.",
+    timelineLines.length
+      ? `Timeline: ${timelineLines.join(" | ")}`
+      : "Timeline: no clear timeline captured yet.",
+    conditionLines.length
+      ? `Possible explanations: ${conditionLines.join(" | ")}`
+      : "Possible explanations: not enough information yet.",
     snapshot.nextQuestion ? `Next question Curable chose: ${snapshot.nextQuestion}` : "",
     snapshot.stewardship?.nextAction
       ? `Stewardship action: ${snapshot.stewardship.nextAction}. ${snapshot.stewardship.reason || ""}`.trim()
@@ -477,10 +619,11 @@ function buildFallbackReport(
   patientMedications: any[],
   memory: any[] | null,
   recentMessages: any[] | null,
-  reasoningSnapshot?: any
+  reasoningSnapshot?: any,
 ) {
   const lower = `${reason} ${recentMessages?.map((m) => m.content).join(" ") || ""}`.toLowerCase();
-  const risk = lower.includes("chest pain") || lower.includes("trouble breathing") ? "emergency" : "moderate";
+  const risk =
+    lower.includes("chest pain") || lower.includes("trouble breathing") ? "emergency" : "moderate";
 
   return {
     summary: reason || "Patient requested doctor review of recent symptoms and AI conversation.",
@@ -493,7 +636,8 @@ function buildFallbackReport(
       patient.pinned_by_doctor ? `Doctor note: ${patient.pinned_by_doctor}` : "",
     ].filter(Boolean),
     medicationContext: patientMedications.map(
-      (m) => `${m.name} ${m.dosage}, ${m.frequency}; purpose: ${m.purpose}; adherence ${Math.round(m.adherence * 100)}%`
+      (m) =>
+        `${m.name} ${m.dosage}, ${m.frequency}; purpose: ${m.purpose}; adherence ${Math.round(m.adherence * 100)}%`,
     ),
     memoryContext: memory?.map((m) => `${m.label}: ${m.details}`) || [],
     recentConversation: recentMessages?.map((m) => `${m.role}: ${m.content}`) || [],
@@ -503,7 +647,10 @@ function buildFallbackReport(
 }
 
 function parseReportJson(raw: string) {
-  const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+  const cleaned = raw
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
 
   try {
     return JSON.parse(cleaned);
@@ -529,12 +676,15 @@ function toStringArray(value: unknown) {
 function normalizeDoctorReport(report: any, reason: string, fallbackReasoningSnapshot?: any) {
   const risk = String(report?.risk || "moderate").toLowerCase();
   const allowedRisk = ["low", "moderate", "high", "emergency"].includes(risk) ? risk : "moderate";
-  const reportReasoning = normalizeReasoning(report?.reasoningSnapshot) || fallbackReasoningSnapshot || null;
+  const reportReasoning =
+    normalizeReasoning(report?.reasoningSnapshot) || fallbackReasoningSnapshot || null;
 
   return {
     summary: String(report?.summary || reason || "Patient requested doctor review."),
     risk: allowedRisk,
-    doctorQuestion: String(report?.doctorQuestion || reason || "Please review the patient's concern."),
+    doctorQuestion: String(
+      report?.doctorQuestion || reason || "Please review the patient's concern.",
+    ),
     patientContext: toStringArray(report?.patientContext),
     medicationContext: toStringArray(report?.medicationContext),
     memoryContext: toStringArray(report?.memoryContext),
@@ -589,74 +739,78 @@ export const sendMessage = createServerFn({
     patientId: z.string().uuid(),
     message: z.string(),
   }),
-})
-  .handler(async ({ data: { patientId, message } }) => {
-    // Move server-only imports inside the handler
-    const { OpenAI } = await import("openai");
-    const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-    const client = supabaseAdmin || supabase;
+}).handler(async ({ data: { patientId, message } }) => {
+  // Move server-only imports inside the handler
+  const { OpenAI } = await import("openai");
+  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
+  const client = supabaseAdmin || supabase;
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
-    });
-    const deepseek = process.env.DEEPSEEK_API_KEY
-      ? new OpenAI({
-          apiKey: process.env.DEEPSEEK_API_KEY,
-          baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL,
-        })
-      : null;
-
-    // 1. Fetch Patient Context
-    const [{ data: patient }, { data: memory }, { data: recentMessages }] = await Promise.all([
-      client.from("patients").select("*").eq("id", patientId).single(),
-      client
-        .from("memory_snapshots")
-        .select("*")
-        .eq("patient_id", patientId)
-        .order("created_at", { ascending: false })
-        .limit(24),
-      client
-        .from("messages")
-        .select("role, content, created_at")
-        .eq("patient_id", patientId)
-        .order("created_at", { ascending: false })
-        .limit(10),
-    ]);
-
-    if (!patient) throw new Error("Patient not found");
-
-    const { error: patientMessageError } = await client.from("messages").insert({
-      patient_id: patientId,
-      role: "patient",
-      content: message,
-    });
-    if (patientMessageError) throw patientMessageError;
-
-    // 2. Format Context for AI
-    const patientMedications = await fetchMedicationsForPatient(patientId);
-    const medicationContext = patientMedications
-      .map((m) => {
-        const sideEffects = m.sideEffects.length ? `; reported side effects: ${m.sideEffects.join(", ")}` : "";
-        return `- ${m.name} ${m.dosage}, ${m.frequency} at ${m.time}; purpose: ${m.purpose}; source: ${m.source}; adherence: ${Math.round(m.adherence * 100)}%; prescriber: ${m.prescriber}${sideEffects}`;
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
+  });
+  const deepseek = process.env.DEEPSEEK_API_KEY
+    ? new OpenAI({
+        apiKey: process.env.DEEPSEEK_API_KEY,
+        baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL,
       })
-      .join("\n");
+    : null;
 
-    const memoryContext = memory?.length
-      ? memory
-          .map((m) => `- [L${m.layer}: ${memoryLayerNames[m.layer] || "Memory"}] ${m.label}: ${m.details}`)
-          .join("\n")
-      : "No saved health memory yet.";
+  // 1. Fetch Patient Context
+  const [{ data: patient }, { data: memory }, { data: recentMessages }] = await Promise.all([
+    client.from("patients").select("*").eq("id", patientId).single(),
+    client
+      .from("memory_snapshots")
+      .select("*")
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .limit(24),
+    client
+      .from("messages")
+      .select("role, content, created_at")
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
 
-    const recentConversationContext = recentMessages?.length
-      ? recentMessages
-          .slice()
-          .reverse()
-          .map((m) => `${m.role}: ${m.content}`)
-          .join("\n")
-      : "No prior messages in this chat.";
+  if (!patient) throw new Error("Patient not found");
 
-    const today = new Date().toISOString().slice(0, 10);
-    const contextStr = `
+  const { error: patientMessageError } = await client.from("messages").insert({
+    patient_id: patientId,
+    role: "patient",
+    content: message,
+  });
+  if (patientMessageError) throw patientMessageError;
+
+  // 2. Format Context for AI
+  const patientMedications = await fetchMedicationsForPatient(patientId);
+  const medicationContext = patientMedications
+    .map((m) => {
+      const sideEffects = m.sideEffects.length
+        ? `; reported side effects: ${m.sideEffects.join(", ")}`
+        : "";
+      return `- ${m.name} ${m.dosage}, ${m.frequency} at ${m.time}; purpose: ${m.purpose}; source: ${m.source}; adherence: ${Math.round(m.adherence * 100)}%; prescriber: ${m.prescriber}${sideEffects}`;
+    })
+    .join("\n");
+
+  const memoryContext = memory?.length
+    ? memory
+        .map(
+          (m) =>
+            `- [L${m.layer}: ${memoryLayerNames[m.layer] || "Memory"}] ${m.label}: ${m.details}`,
+        )
+        .join("\n")
+    : "No saved health memory yet.";
+
+  const recentConversationContext = recentMessages?.length
+    ? recentMessages
+        .slice()
+        .reverse()
+        .map((m) => `${m.role}: ${m.content}`)
+        .join("\n")
+    : "No prior messages in this chat.";
+
+  const today = new Date().toISOString().slice(0, 10);
+  const contextStr = `
 Today's date: ${today}
 Patient: ${patient.full_name} (${patient.age}y, ${patient.sex})
 Known Conditions: ${patient.conditions?.join(", ") || "None"}
@@ -673,29 +827,39 @@ Recent Conversation:
 ${recentConversationContext}
     `.trim();
 
-    // 3. Call OpenAI, with a local safety fallback if quota is unavailable.
-    let fullContent = "";
-    const chatMessages = [
-      {
-        role: "system" as const,
-        content: `You are Curable AI, a context-aware health reasoning assistant.
-Your goal is to help the patient understand symptoms through careful, transparent pattern comparison while keeping the chat light and human.
+  // 3. Call OpenAI, with a local safety fallback if quota is unavailable.
+  let fullContent = "";
+  const chatMessages = [
+    {
+      role: "system" as const,
+      content: `You are Curable AI, a context-aware health reasoning assistant.
+Your goal is to help the patient explain what they feel, narrow what it could be, and know what to do next through careful adaptive questioning.
 
 ### INTERNAL ORCHESTRATOR:
 Before writing the visible reply, silently run these stages:
 1. Intake Agent: extract symptoms, onset, progression, medication use, profile facts, allergies, memory, and what the patient already answered.
 2. Timeline Agent: turn time clues into a short illness timeline. Use today's date from context when estimating dates. Mark uncertainty instead of inventing.
-3. Hypothesis Agent: list possible explanations for the graph. These are not diagnoses.
-4. Challenger Agent: for each explanation, state what weakens it or what is still missing. Use this to avoid overconfidence.
-5. Question Chooser: choose only ONE best next question from the missing information. Prioritize the question that most separates the top explanations or improves safety.
-6. Stewardship Agent: decide the next product action: ask one question, update reasoning, suggest doctor validation, urgent care warning, reassure and monitor, or wait for user.
-7. Presentation Agent: write the short patient-facing reply.
+3. Early Differential Agent: create a low-confidence differential immediately, but do not reveal it too early unless enough useful context exists. These are possible explanations, not diagnoses.
+4. Uncertainty Gap Agent: identify the missing detail that would most change the differential or the next action.
+5. Challenger Agent: for each explanation, state what weakens it or what is still missing. Use this to avoid overconfidence.
+6. Question Chooser: choose only ONE best next question, or one tight grouped question, from the uncertainty gaps. Prioritize the question that most separates the top explanations, captures minute clinical detail, or improves safety without creating fatigue.
+7. Stewardship Agent: decide the next product action: ask one question, update reasoning, suggest doctor validation, urgent care warning, reassure and monitor, or wait for user.
+8. Presentation Agent: write the short patient-facing reply in everyday language.
+
+### ADAPTIVE QUESTIONING MODEL:
+- Think early internally. Generate an early differential after the first symptom, but keep confidence low and usually ask before showing the full list.
+- Do not use a rigid checklist. Use complaint-specific knowledge to select the highest-value next question.
+- If headache + fever: ask infection/meningitis/malaria-separating questions early, phrased calmly.
+- If headache + stress/screen strain: ask tension, migraine, sleep, hydration, and eye-strain separating questions.
+- If headache + trauma: ask injury-focused questions before routine headache causes.
+- If a user gives a specific detail like "front headache", immediately use it to narrow location-specific possibilities and ask the next differentiating question.
+- Stop questioning when the next answer is unlikely to change the guidance, when enough context exists for a careful possible-causes summary, or when care-seeking advice is already the safest action.
 
 ### GUIDELINES:
 1. Never diagnose. Say "possible explanations" or "pattern match", not "you have".
-2. Keep the visible reply short: usually 1-2 sentences.
-3. Ask at most ONE targeted question at a time when more context is needed.
-4. Do not show a list of questions in the visible reply.
+2. Keep the visible reply short and engaging: usually 1-3 sentences.
+3. Ask at most ONE targeted question at a time, or one tight grouped question with short yes/no items when clinically useful.
+4. Do not show a long questionnaire in the visible reply.
 5. Do not include a "what Curable cannot confirm" section in the visible reply.
 6. Do not ask for information the patient already gave in the current or recent messages.
 7. Never tell a patient to stop, start, or change a prescribed medication without doctor review.
@@ -711,147 +875,150 @@ These tags will be stripped by the backend and NOT shown to the patient.
 Tags:
 [SIGNAL: label | layer | details] -> layer 1: stable profile fact, allergy, condition, procedure, pregnancy, care preference; layer 2: medication reaction, adherence pattern, recurring symptom, lifestyle pattern; layer 3: current symptom event or recent concern
 [ESCALATE: risk | summary | recommendation] -> risk: low, moderate, high, emergency
-<curable_reasoning>{"stage":"collecting","readiness":"collecting","concernSummary":"short restatement of the concern","timeline":[{"event":"what happened","whenText":"patient wording like yesterday or this morning","estimatedDate":"YYYY-MM-DD or empty if uncertain","certainty":"user_reported","source":"chat_message"}],"nextQuestion":"the one question you are asking, if any","possibleConditions":[{"name":"possible explanation","score":0-100,"matchLabel":"Strong pattern match","support":["brief reason this is being considered"],"weakens":["brief reason this may be wrong or is still unconfirmed"]}],"stewardship":{"nextAction":"ask_one_question","reason":"why this action is best now","shouldOfferDoctorValidation":false,"shouldWarnUrgentCare":false,"shouldStopQuestioning":false},"usedContext":{"profile":["facts used"],"medications":["meds used"],"memory":["memory used"],"conversation":["recent answers used"]}}</curable_reasoning>
+<curable_reasoning>{"stage":"collecting","readiness":"collecting","concernSummary":"short restatement of the concern","timeline":[{"event":"what happened","whenText":"patient wording like yesterday or this morning","estimatedDate":"YYYY-MM-DD or empty if uncertain","certainty":"user_reported","source":"chat_message"}],"nextQuestion":"the one targeted or tightly grouped question you are asking, if any","uncertaintyGaps":["missing detail that would change ranking or next action"],"possibleConditions":[{"name":"possible explanation","score":0-100,"matchLabel":"Strong pattern match","support":["brief reason this is being considered"],"weakens":["brief reason this may be wrong or is still unconfirmed"]}],"stewardship":{"nextAction":"ask_one_question","reason":"why this action is best now","shouldOfferDoctorValidation":false,"shouldWarnUrgentCare":false,"shouldStopQuestioning":false},"usedContext":{"profile":["facts used"],"medications":["meds used"],"memory":["memory used"],"conversation":["recent answers used"]}}</curable_reasoning>
 
 Graph guidance:
 - Include 1-4 possible explanations.
 - Scores are for visual comparison only, not diagnostic probability.
-- Prefer "collecting" until you know the main symptom and timing.
-- The visible reply should ask only the next best question; deeper reasoning belongs in <curable_reasoning>.
+- Prefer "collecting" until the key uncertainty gaps are reduced enough for useful guidance.
+- The visible reply should ask the next best question; deeper reasoning and uncertainty gaps belong in <curable_reasoning>.
 - Include timeline, challenger weakens, stewardship, and usedContext even when still collecting.
 - Use "reasoning_ready" stage only when there is enough symptom and timeline context to create a useful doctor validation report.
 
 Example:
 "I understand. When did the fever start? [SIGNAL: Fever report | 3 | Patient reports fever] [ESCALATE: low | Fever reported | Continue guided questioning] <curable_reasoning>{"stage":"collecting","readiness":"collecting","concernSummary":"Patient reports fever, but timing is not clear yet.","timeline":[{"event":"Fever reported","whenText":"not yet known","estimatedDate":"","certainty":"unknown","source":"chat_message"}],"nextQuestion":"When did the fever start?","possibleConditions":[{"name":"Malaria","score":45,"matchLabel":"Partial match","support":["Fever can fit malaria patterns, especially depending on region."],"weakens":["Timing, chills, sweating, and test result are not known yet."]},{"name":"Viral infection","score":42,"matchLabel":"Partial match","support":["Fever can also fit many viral illnesses."],"weakens":["No respiratory, stomach, or exposure details are known yet."]}],"stewardship":{"nextAction":"ask_one_question","reason":"Onset is the first missing timeline detail.","shouldOfferDoctorValidation":false,"shouldWarnUrgentCare":false,"shouldStopQuestioning":false},"usedContext":{"profile":[],"medications":[],"memory":[],"conversation":["Current fever report"]}}</curable_reasoning>"
 `,
-      },
-      { role: "user" as const, content: `CONTEXT:\n${contextStr}\n\nUSER MESSAGE: ${message}` },
-    ];
+    },
+    { role: "user" as const, content: `CONTEXT:\n${contextStr}\n\nUSER MESSAGE: ${message}` },
+  ];
 
-    try {
-      const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || "gpt-4o",
-        messages: chatMessages,
-      });
+  try {
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      messages: chatMessages,
+    });
 
-      fullContent = response.choices[0].message.content || "";
-    } catch (openAiErr) {
-      if (deepseek) {
-        try {
-          const response = await deepseek.chat.completions.create({
-            model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
-            messages: chatMessages,
-          });
+    fullContent = response.choices[0].message.content || "";
+  } catch (openAiErr) {
+    if (deepseek) {
+      try {
+        const response = await deepseek.chat.completions.create({
+          model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
+          messages: chatMessages,
+        });
 
-          fullContent = response.choices[0].message.content || "";
-        } catch (deepseekErr) {
-          console.warn("OpenAI and DeepSeek chat unavailable; using local Curable fallback.", {
-            openAiErr,
-            deepseekErr,
-          });
-          fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
-        }
-      } else {
-        console.warn("OpenAI chat unavailable and no DeepSeek key is configured; using local Curable fallback.", openAiErr);
+        fullContent = response.choices[0].message.content || "";
+      } catch (deepseekErr) {
+        console.warn("OpenAI and DeepSeek chat unavailable; using local Curable fallback.", {
+          openAiErr,
+          deepseekErr,
+        });
         fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
       }
+    } else {
+      console.warn(
+        "OpenAI chat unavailable and no DeepSeek key is configured; using local Curable fallback.",
+        openAiErr,
+      );
+      fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
     }
+  }
 
-    // 4. Parse Metadata Tags
-    const signals: { label: string; layer: number; details: string }[] = [];
-    let escalation: { risk: string; summary: string; recommendation: string } | null = null;
-    const reasoning = parseReasoning(fullContent);
+  // 4. Parse Metadata Tags
+  const signals: { label: string; layer: number; details: string }[] = [];
+  let escalation: { risk: string; summary: string; recommendation: string } | null = null;
+  const reasoning = parseReasoning(fullContent);
 
-    // Regex to find [SIGNAL: ...]
-    const signalRegex = /\[SIGNAL:\s*(.*?)\s*\|\s*(\d)\s*\|\s*(.*?)\s*\]/g;
-    let match;
-    while ((match = signalRegex.exec(fullContent)) !== null) {
-      signals.push({
-        label: match[1],
-        layer: parseInt(match[2]),
-        details: match[3],
-      });
-    }
+  // Regex to find [SIGNAL: ...]
+  const signalRegex = /\[SIGNAL:\s*(.*?)\s*\|\s*(\d)\s*\|\s*(.*?)\s*\]/g;
+  let match;
+  while ((match = signalRegex.exec(fullContent)) !== null) {
+    signals.push({
+      label: match[1],
+      layer: parseInt(match[2]),
+      details: match[3],
+    });
+  }
 
-    // Regex to find [ESCALATE: ...]
-    const escalateRegex = /\[ESCALATE:\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\]/;
-    const escalateMatch = fullContent.match(escalateRegex);
-    if (escalateMatch) {
-      escalation = {
-        risk: escalateMatch[1].toLowerCase(),
-        summary: escalateMatch[2],
-        recommendation: escalateMatch[3],
-      };
-    }
+  // Regex to find [ESCALATE: ...]
+  const escalateRegex = /\[ESCALATE:\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\]/;
+  const escalateMatch = fullContent.match(escalateRegex);
+  if (escalateMatch) {
+    escalation = {
+      risk: escalateMatch[1].toLowerCase(),
+      summary: escalateMatch[2],
+      recommendation: escalateMatch[3],
+    };
+  }
 
-    // 5. Clean Content (Strip Tags)
-    const cleanContent = stripClinicalTags(fullContent);
+  // 5. Clean Content (Strip Tags)
+  const cleanContent = stripClinicalTags(fullContent);
 
-    // 6. Persistence
-    // Save AI Message
-    const { data: msgData, error: msgError } = await client
-      .from("messages")
-      .insert({
-        patient_id: patientId,
-        role: "ai",
-        content: cleanContent,
-        metadata: { signals, escalation, reasoning, original_content: fullContent },
-      })
-      .select()
-      .single();
-
-    if (msgError) console.error("Error saving message:", msgError);
-
-    // Save Signals to Memory
-    if (signals.length > 0) {
-      for (const signal of signals) {
-        const { data: existing } = await client
-          .from("memory_snapshots")
-          .select("id, details")
-          .eq("patient_id", patientId)
-          .eq("layer", signal.layer)
-          .ilike("label", signal.label)
-          .maybeSingle();
-
-        if (existing) {
-          await client
-            .from("memory_snapshots")
-            .update({
-              details:
-                existing.details && existing.details !== signal.details
-                  ? `${existing.details}\nUpdate: ${signal.details}`
-                  : signal.details,
-              source_message_id: msgData?.id,
-            })
-            .eq("id", existing.id);
-        } else {
-          await client.from("memory_snapshots").insert({
-            patient_id: patientId,
-            label: signal.label,
-            layer: signal.layer,
-            details: signal.details,
-            source_message_id: msgData?.id,
-          });
-        }
-      }
-    }
-
-    // Doctor review is patient-initiated through the report flow, not automatic chat escalation.
-
-    return {
-      id: msgData?.id,
+  // 6. Persistence
+  // Save AI Message
+  const { data: msgData, error: msgError } = await client
+    .from("messages")
+    .insert({
+      patient_id: patientId,
       role: "ai",
       content: cleanContent,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      risk: escalation?.risk,
-      reasoning,
-      memoriesAdded: signals.map((s) => ({
-        label: s.label,
-        layer: s.layer,
-        details: s.details,
-      })),
-    };
-  });
+      metadata: { signals, escalation, reasoning, original_content: fullContent },
+    })
+    .select()
+    .single();
+
+  if (msgError) console.error("Error saving message:", msgError);
+
+  // Save Signals to Memory
+  if (signals.length > 0) {
+    for (const signal of signals) {
+      const { data: existing } = await client
+        .from("memory_snapshots")
+        .select("id, details")
+        .eq("patient_id", patientId)
+        .eq("layer", signal.layer)
+        .ilike("label", signal.label)
+        .maybeSingle();
+
+      if (existing) {
+        await client
+          .from("memory_snapshots")
+          .update({
+            details:
+              existing.details && existing.details !== signal.details
+                ? `${existing.details}\nUpdate: ${signal.details}`
+                : signal.details,
+            source_message_id: msgData?.id,
+          })
+          .eq("id", existing.id);
+      } else {
+        await client.from("memory_snapshots").insert({
+          patient_id: patientId,
+          label: signal.label,
+          layer: signal.layer,
+          details: signal.details,
+          source_message_id: msgData?.id,
+        });
+      }
+    }
+  }
+
+  // Doctor review is patient-initiated through the report flow, not automatic chat escalation.
+
+  return {
+    id: msgData?.id,
+    role: "ai",
+    content: cleanContent,
+    time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    risk: escalation?.risk,
+    reasoning,
+    memoriesAdded: signals.map((s) => ({
+      label: s.label,
+      layer: s.layer,
+      details: s.details,
+    })),
+  };
+});
 
 export const createDoctorReviewReport = createServerFn({
   method: "POST",
@@ -894,7 +1061,10 @@ export const createDoctorReviewReport = createServerFn({
 
   const patientMedications = await fetchMedicationsForPatient(patientId);
   const medicationContext = patientMedications
-    .map((m) => `${m.name} ${m.dosage}, ${m.frequency}; ${m.purpose}; adherence ${Math.round(m.adherence * 100)}%`)
+    .map(
+      (m) =>
+        `${m.name} ${m.dosage}, ${m.frequency}; ${m.purpose}; adherence ${Math.round(m.adherence * 100)}%`,
+    )
     .join("\n");
 
   const memoryContext = memory?.length
@@ -984,15 +1154,35 @@ ${reasoningContext}`,
         const raw = response.choices[0].message.content || "{}";
         report = normalizeDoctorReport(parseReportJson(raw), reason, latestReasoningSnapshot);
       } catch (deepseekErr) {
-        console.warn("OpenAI and DeepSeek report generation unavailable; using structured fallback report.", {
-          openAiErr,
-          deepseekErr,
-        });
-        report = buildFallbackReport(reason, patient, patientMedications, memory || [], recentMessages || [], latestReasoningSnapshot);
+        console.warn(
+          "OpenAI and DeepSeek report generation unavailable; using structured fallback report.",
+          {
+            openAiErr,
+            deepseekErr,
+          },
+        );
+        report = buildFallbackReport(
+          reason,
+          patient,
+          patientMedications,
+          memory || [],
+          recentMessages || [],
+          latestReasoningSnapshot,
+        );
       }
     } else {
-      console.warn("OpenAI report generation unavailable and no DeepSeek key is configured; using structured fallback report.", openAiErr);
-      report = buildFallbackReport(reason, patient, patientMedications, memory || [], recentMessages || [], latestReasoningSnapshot);
+      console.warn(
+        "OpenAI report generation unavailable and no DeepSeek key is configured; using structured fallback report.",
+        openAiErr,
+      );
+      report = buildFallbackReport(
+        reason,
+        patient,
+        patientMedications,
+        memory || [],
+        recentMessages || [],
+        latestReasoningSnapshot,
+      );
     }
   }
 
@@ -1033,7 +1223,9 @@ export const sendDoctorReviewReport = createServerFn({
   };
 
   if (!assignedDoctor.doctorName) {
-    throw new Error("Add a validating doctor in Consultation before sending a doctor review report.");
+    throw new Error(
+      "Add a validating doctor in Consultation before sending a doctor review report.",
+    );
   }
 
   const detailLines = [
@@ -1077,7 +1269,10 @@ export const sendDoctorReviewReport = createServerFn({
       status: "sent",
     });
   } catch (err) {
-    console.warn("doctor_reports insert failed. Run supabase-curable-schema.sql to enable report persistence.", err);
+    console.warn(
+      "doctor_reports insert failed. Run supabase-curable-schema.sql to enable report persistence.",
+      err,
+    );
   }
 
   return { id: data?.id };
