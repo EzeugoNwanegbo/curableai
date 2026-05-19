@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from "@tanstack/react-router";
+import { Link, Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import { Activity, Pill, Stethoscope, User, Bell, MessageSquare, Home, LogOut, Loader2, ShieldAlert } from "lucide-react";
 import { useAuth, type UserRole } from "@/lib/auth";
 
@@ -63,7 +63,7 @@ export function AppShell() {
   }
 
   if (needsAuth && !auth.session) {
-    return <AccessMessage title="Sign in required" body="Use a patient or doctor account to continue." action="Sign in" />;
+    return <Navigate to="/auth" replace />;
   }
 
   if (auth.authError && needsAuth) {
