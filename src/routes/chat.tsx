@@ -403,7 +403,7 @@ function ChatPage() {
   const handleCreateReport = async () => {
     if (!patient || isCreatingReport) return;
     if (!doctorConnection?.doctorName) {
-      setReportError("Add a validating doctor in Consultation before creating a doctor report.");
+      setReportError("Add a validating doctor from Add Doctor before creating a doctor report.");
       return;
     }
     const reason = latestReasoningMessage?.reasoning?.concernSummary
@@ -431,7 +431,7 @@ function ChatPage() {
   const handleSendReport = async () => {
     if (!patient || !doctorReport || isSendingReport) return;
     if (!doctorConnection?.doctorName) {
-      setReportError("Add a validating doctor in Consultation before sending this report.");
+      setReportError("Add a validating doctor from Add Doctor before sending this report.");
       return;
     }
     setIsSendingReport(true);
@@ -621,14 +621,7 @@ function ChatPage() {
                 )}
                 {isCreatingReport ? "Preparing report" : "Request doctor review"}
               </button>
-            ) : (
-              <Link
-                to="/consultation"
-                className="hidden items-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10 lg:inline-flex"
-              >
-                <Stethoscope className="h-3.5 w-3.5" /> Add doctor
-              </Link>
-            )}
+            ) : null}
           </div>
         </header>
 
@@ -759,13 +752,7 @@ function ChatPage() {
 
           {reportError ? (
             <div className="rounded-md border border-gold/40 bg-gold/10 p-3 text-sm leading-relaxed text-foreground">
-              {reportError}{" "}
-              <Link
-                to="/consultation"
-                className="font-medium text-accent underline underline-offset-4"
-              >
-                Add doctor
-              </Link>
+              {reportError}
             </div>
           ) : null}
 
@@ -843,14 +830,6 @@ function ChatPage() {
           className="border-t border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-4"
           onSubmit={handleSend}
         >
-          {!doctorConnection?.doctorName ? (
-            <Link
-              to="/consultation"
-              className="mb-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/10 lg:hidden"
-            >
-              <Stethoscope className="h-3.5 w-3.5" /> Add doctor
-            </Link>
-          ) : null}
           <div className="flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
             <input
               value={input}

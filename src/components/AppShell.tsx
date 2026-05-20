@@ -4,23 +4,22 @@ import {
   Pill,
   Stethoscope,
   User,
-  Bell,
   MessageSquare,
   Home,
   LogOut,
   ShieldAlert,
   PanelLeftClose,
   PanelLeftOpen,
+  UserPlus,
 } from "lucide-react";
 import { useAuth, type UserRole } from "@/lib/auth";
 
 const patientNav = [
   { to: "/", label: "Overview", icon: Home },
-  { to: "/chat", label: "AI Follow-up", icon: MessageSquare },
+  { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/medications", label: "Medications", icon: Pill },
   { to: "/profile", label: "Health Profile", icon: User },
-  { to: "/notifications", label: "Notifications", icon: Bell },
-  { to: "/consultation", label: "Consultation", icon: Stethoscope },
+  { to: "/consultation", label: "Add Doctor", icon: UserPlus },
 ];
 
 const doctorNav = [
@@ -97,8 +96,8 @@ export function AppShell() {
     return (
       <AccessMessage
         title="Doctor area"
-        body="This dashboard is for doctor accounts. Patient accounts can use AI follow-up, medications, profile, notifications, and consultations."
-        action="Go to AI follow-up"
+        body="This dashboard is for doctor accounts. Patient accounts can use chat, medications, health profile, and doctor setup."
+        action="Go to chat"
         to="/chat"
       />
     );
@@ -229,7 +228,7 @@ export function AppShell() {
                 }`}
               >
                 <Icon className="h-4 w-4" />
-                <span className="max-w-full truncate">{label.replace("AI Follow-up", "Chat")}</span>
+                <span className="max-w-full truncate">{label}</span>
               </Link>
             );
           })}
