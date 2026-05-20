@@ -173,7 +173,7 @@ function ChatPage() {
   const [input, setInput] = useState("");
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("current");
-  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isMobileContextOpen, setIsMobileContextOpen] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [patient, setPatient] = useState<{ id: string; name: string; pinned?: string } | null>(
@@ -480,16 +480,31 @@ function ChatPage() {
   }
 
   return (
-    <div className="grid min-h-[calc(100vh-5rem)] grid-cols-1 lg:min-h-screen lg:grid-cols-[280px_1fr_360px]">
-      <aside className="hidden border-r border-border bg-card/60 p-4 lg:block">
-        <div className="flex items-center justify-between gap-3">
+    <div
+      className={`grid min-h-[calc(100vh-5rem)] grid-cols-1 lg:min-h-screen ${
+        isHistoryOpen ? "lg:grid-cols-[280px_1fr_360px]" : "lg:grid-cols-[72px_1fr_360px]"
+      }`}
+    >
+      <aside className="hidden border-r border-border bg-card/60 p-3 lg:block">
+        <div
+          className={
+            isHistoryOpen
+              ? "flex items-center justify-between gap-3"
+              : "flex flex-col items-center gap-3"
+          }
+        >
           <button
             type="button"
             onClick={() => setIsHistoryOpen((value) => !value)}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-foreground"
+            className={`inline-flex items-center gap-2 text-sm font-semibold text-foreground ${
+              isHistoryOpen
+                ? ""
+                : "h-10 w-10 justify-center rounded-md border border-border bg-background"
+            }`}
+            aria-label={isHistoryOpen ? "Collapse chat history" : "Expand chat history"}
           >
             <History className="h-4 w-4 text-primary" />
-            Chat history
+            {isHistoryOpen ? "Chat history" : null}
           </button>
           <button
             type="button"
@@ -535,13 +550,34 @@ function ChatPage() {
               </p>
             )}
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            {chatHistory.slice(0, 5).map((chat, index) => (
+              <button
+                key={chat.id}
+                type="button"
+                onClick={() => {
+                  setActiveConversationId(chat.id);
+                  setIsHistoryOpen(true);
+                }}
+                className={`flex h-9 w-9 items-center justify-center rounded-md border text-xs font-semibold ${
+                  chat.id === activeConversationId
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border bg-background/60 text-muted-foreground hover:bg-muted"
+                }`}
+                title={chat.title}
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
+        )}
       </aside>
 
       {/* Conversation */}
       <div className="flex h-[calc(100vh-5rem)] flex-col border-r border-border lg:h-screen">
-        <header className="flex flex-col gap-4 border-b border-border bg-card px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:py-5">
-          <div>
+        <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-5">
+          <div className="hidden lg:block">
             <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
               Page 01
             </div>
@@ -549,38 +585,34 @@ function ChatPage() {
               AI Follow-up · {patient.name}
             </h1>
           </div>
+          <button
+            type="button"
+            onClick={() => setIsHistoryOpen((value) => !value)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background lg:hidden"
+            aria-label="Open chat history"
+          >
+            <History className="h-4 w-4 text-primary" />
+          </button>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={handleNewChat}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary lg:hidden"
-            >
-              <Plus className="h-3.5 w-3.5" /> New chat
-            </button>
-            <button
-              type="button"
               onClick={() => setIsMobileContextOpen((value) => !value)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground lg:hidden"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary lg:hidden"
             >
-              <BarChart3 className="h-3.5 w-3.5" /> Context
+              <BarChart3 className="h-3.5 w-3.5" /> Possible cases
             </button>
             {doctorConnection?.doctorName ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
+              <span className="hidden items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success lg:inline-flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />{" "}
                 {doctorConnection.doctorName} supervising
               </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" /> No validating
-                doctor
-              </span>
-            )}
+            ) : null}
             {doctorConnection?.doctorName ? (
               <button
                 type="button"
                 onClick={handleCreateReport}
                 disabled={isCreatingReport}
-                className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10"
+                className="hidden items-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10 lg:inline-flex"
               >
                 {isCreatingReport ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -592,7 +624,7 @@ function ChatPage() {
             ) : (
               <Link
                 to="/consultation"
-                className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10"
+                className="hidden items-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10 lg:inline-flex"
               >
                 <Stethoscope className="h-3.5 w-3.5" /> Add doctor
               </Link>
@@ -600,38 +632,34 @@ function ChatPage() {
           </div>
         </header>
 
-        <div className="border-b border-border bg-card/70 px-4 py-3 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setIsHistoryOpen((value) => !value)}
-            className="flex w-full items-center justify-between text-sm font-semibold text-foreground"
-          >
-            <span className="inline-flex items-center gap-2">
-              <History className="h-4 w-4 text-primary" />
-              Chat history
-            </span>
-            <ChevronDown
-              className={`h-4 w-4 text-muted-foreground transition-transform ${
-                isHistoryOpen ? "rotate-180" : ""
-              }`}
-            />
-          </button>
-          {isHistoryOpen ? (
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {isHistoryOpen ? (
+          <div className="border-b border-border bg-card/95 px-4 py-3 shadow-elegant lg:hidden">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold text-foreground">Chat history</div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(false)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground"
+                aria-label="Close chat history"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="grid max-h-56 gap-2 overflow-y-auto">
               <button
                 type="button"
                 onClick={handleNewChat}
-                className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-foreground"
+                className="inline-flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-foreground"
               >
                 <Plus className="h-4 w-4 text-primary" />
-                New
+                New chat
               </button>
               {chatHistory.map((chat) => (
                 <button
                   key={chat.id}
                   type="button"
                   onClick={() => setActiveConversationId(chat.id)}
-                  className={`min-w-40 shrink-0 rounded-md border px-3 py-2 text-left ${
+                  className={`rounded-md border px-3 py-2 text-left ${
                     chat.id === activeConversationId
                       ? "border-primary/40 bg-primary/10"
                       : "border-border bg-background/60"
@@ -644,8 +672,8 @@ function ChatPage() {
                 </button>
               ))}
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {isMobileContextOpen ? (
           <div className="max-h-[45vh] overflow-y-auto border-b border-border bg-surface px-4 py-4 lg:hidden">
@@ -815,6 +843,14 @@ function ChatPage() {
           className="border-t border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-4"
           onSubmit={handleSend}
         >
+          {!doctorConnection?.doctorName ? (
+            <Link
+              to="/consultation"
+              className="mb-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/10 lg:hidden"
+            >
+              <Stethoscope className="h-3.5 w-3.5" /> Add doctor
+            </Link>
+          ) : null}
           <div className="flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
             <input
               value={input}
@@ -836,7 +872,7 @@ function ChatPage() {
               )}
             </button>
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-2 hidden text-[11px] text-muted-foreground sm:block">
             Guided reasoning active · one question at a time · relevant details can become memory.
           </p>
         </form>
