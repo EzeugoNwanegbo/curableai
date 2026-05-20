@@ -33,6 +33,44 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AUTH_CACHE_KEY = "curable:last-account";
+
+interface CachedAccount {
+  role: UserRole;
+  patientId: string | null;
+  displayName: string;
+}
+
+function readCachedAccount(): CachedAccount | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(AUTH_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<CachedAccount>;
+    if (parsed.role !== "patient" && parsed.role !== "doctor") return null;
+
+    return {
+      role: parsed.role,
+      patientId: typeof parsed.patientId === "string" ? parsed.patientId : null,
+      displayName: parsed.displayName || "Curable user",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAccount(account: CachedAccount | null) {
+  if (typeof window === "undefined") return;
+
+  if (!account) {
+    window.localStorage.removeItem(AUTH_CACHE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(account));
+}
 
 export function getUserRole(user: User | null): UserRole {
   return user?.user_metadata?.role === "doctor" ? "doctor" : "patient";
@@ -48,20 +86,32 @@ export function getUserDisplayName(user: User | null) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [cachedAccount, setCachedAccount] = useState<CachedAccount | null>(() =>
+    readCachedAccount(),
+  );
   const [session, setSession] = useState<Session | null>(null);
-  const [patientId, setPatientId] = useState<string | null>(null);
+  const [patientId, setPatientId] = useState<string | null>(cachedAccount?.patientId ?? null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const user = session?.user || null;
-  const role = user ? getUserRole(user) : null;
-  const displayName = getUserDisplayName(user);
+  const role = user ? getUserRole(user) : (cachedAccount?.role ?? null);
+  const displayName = user
+    ? getUserDisplayName(user)
+    : (cachedAccount?.displayName ?? "Curable user");
 
   const ensurePatient = async (currentSession: Session, profile?: RefreshPatientInput) => {
     const currentRole = getUserRole(currentSession.user);
 
     if (currentRole !== "patient") {
       setPatientId(null);
+      const account = {
+        role: currentRole,
+        patientId: null,
+        displayName: getUserDisplayName(currentSession.user),
+      };
+      setCachedAccount(account);
+      writeCachedAccount(account);
       return;
     }
 
@@ -84,6 +134,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     setPatientId(patient.id);
+    const account = {
+      role: currentRole,
+      patientId: patient.id,
+      displayName: getUserDisplayName(currentSession.user),
+    };
+    setCachedAccount(account);
+    writeCachedAccount(account);
   };
 
   const applySession = async (nextSession: Session | null) => {
@@ -96,6 +153,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await ensurePatient(nextSession);
       } else {
         setPatientId(null);
+        setCachedAccount(null);
+        writeCachedAccount(null);
       }
     } catch (err: any) {
       setPatientId(null);
@@ -142,6 +201,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await supabase.auth.signOut();
         setSession(null);
         setPatientId(null);
+        setCachedAccount(null);
+        writeCachedAccount(null);
       },
     }),
     [authError, displayName, isLoading, patientId, role, session, user],

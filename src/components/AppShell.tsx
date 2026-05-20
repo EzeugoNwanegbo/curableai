@@ -1,4 +1,5 @@
 import { Link, Navigate, Outlet, useLocation } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   Pill,
   Stethoscope,
@@ -7,8 +8,9 @@ import {
   MessageSquare,
   Home,
   LogOut,
-  Loader2,
   ShieldAlert,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useAuth, type UserRole } from "@/lib/auth";
 
@@ -38,6 +40,7 @@ function roleLabel(role: UserRole | null) {
 export function AppShell() {
   const location = useLocation();
   const auth = useAuth();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const isAuthPage = location.pathname === "/auth";
   const needsAuth = !publicPaths.has(location.pathname);
 
@@ -61,17 +64,8 @@ export function AppShell() {
     );
   }
 
-  if (auth.isLoading && needsAuth) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="font-serif text-lg text-muted-foreground">
-            Preparing your Curable account...
-          </p>
-        </div>
-      </div>
-    );
+  if (auth.isLoading && needsAuth && !auth.role) {
+    return <div className="min-h-screen bg-background" aria-hidden="true" />;
   }
 
   if (needsAuth && !auth.session) {
@@ -115,18 +109,46 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-background pb-20 lg:pb-0">
-      <aside className="fixed left-0 top-0 hidden h-screen w-72 flex-col border-r border-border bg-card/90 px-5 py-7 shadow-elegant backdrop-blur lg:flex">
-        <Link to="/" className="mb-10 flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-lg font-extrabold text-primary-foreground shadow-elegant">
-            C
-          </div>
-          <div>
-            <div className="text-lg font-extrabold leading-none">Curable</div>
-            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Health companion
+      <aside
+        className={`fixed left-0 top-0 hidden h-screen flex-col border-r border-border bg-card/90 py-7 shadow-elegant backdrop-blur transition-[width] duration-200 lg:flex ${
+          isMenuOpen ? "w-72 px-5" : "w-[72px] px-3"
+        }`}
+      >
+        <div
+          className={`mb-10 flex items-center ${
+            isMenuOpen ? "justify-between gap-3" : "flex-col gap-3"
+          }`}
+        >
+          <Link
+            to="/"
+            className={`flex items-center gap-2 ${isMenuOpen ? "" : "justify-center"}`}
+            aria-label="Curable home"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-lg font-extrabold text-primary-foreground shadow-elegant">
+              C
             </div>
-          </div>
-        </Link>
+            {isMenuOpen ? (
+              <div>
+                <div className="text-lg font-extrabold leading-none">Curable</div>
+                <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Health companion
+                </div>
+              </div>
+            ) : null}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen((value) => !value)}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={isMenuOpen ? "Collapse side menu" : "Expand side menu"}
+          >
+            {isMenuOpen ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeftOpen className="h-4 w-4" />
+            )}
+          </button>
+        </div>
 
         <nav className="flex flex-1 flex-col gap-1">
           {nav.map(({ to, label, icon: Icon }) => {
@@ -135,45 +157,60 @@ export function AppShell() {
               <Link
                 key={to}
                 to={to}
-                className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+                title={isMenuOpen ? undefined : label}
+                className={`group flex items-center rounded-lg text-sm font-medium transition-all ${
                   active
                     ? "bg-primary text-primary-foreground shadow-elegant"
                     : "text-foreground/70 hover:bg-muted hover:text-foreground"
-                }`}
+                } ${isMenuOpen ? "gap-3 px-3 py-2.5" : "h-11 justify-center px-0"}`}
               >
                 <Icon className="h-4 w-4" />
-                {label}
+                {isMenuOpen ? label : null}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-6 rounded-lg border border-accent/20 bg-accent/10 p-4">
-          <div className="text-sm font-semibold leading-snug text-foreground">
-            Curable asks the next useful question and keeps the picture clear.
+        {isMenuOpen ? (
+          <div className="mt-6 rounded-lg border border-accent/20 bg-accent/10 p-4">
+            <div className="text-sm font-semibold leading-snug text-foreground">
+              Curable asks the next useful question and keeps the picture clear.
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {auth.session ? (
-          <div className="mt-4 rounded-lg border border-border bg-background/70 p-4">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              {roleLabel(auth.role)} account
-            </div>
-            <div className="mt-1 truncate text-sm font-medium text-foreground">
-              {auth.displayName}
-            </div>
+          <div
+            className={`mt-4 rounded-lg border border-border bg-background/70 ${
+              isMenuOpen ? "p-4" : "p-2"
+            }`}
+          >
+            {isMenuOpen ? (
+              <>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {roleLabel(auth.role)} account
+                </div>
+                <div className="mt-1 truncate text-sm font-medium text-foreground">
+                  {auth.displayName}
+                </div>
+              </>
+            ) : null}
             <button
               type="button"
               onClick={() => void auth.signOut()}
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-card text-xs font-semibold text-foreground transition-colors hover:bg-muted ${
+                isMenuOpen ? "mt-3 px-3 py-2" : "h-10 px-0"
+              }`}
+              aria-label="Sign out"
             >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
+              <LogOut className="h-3.5 w-3.5" />
+              {isMenuOpen ? "Sign out" : null}
             </button>
           </div>
         ) : null}
       </aside>
 
-      <main className="lg:pl-72">
+      <main className={isMenuOpen ? "lg:pl-72" : "lg:pl-[72px]"}>
         <Outlet />
       </main>
 
