@@ -16,6 +16,8 @@ import {
   MessageSquare,
   BarChart3,
   ChevronDown,
+  History,
+  Plus,
 } from "lucide-react";
 import {
   createDoctorReviewReport,
@@ -50,6 +52,8 @@ interface Message {
   actions?: string[];
   doctorReview?: DoctorReviewUpdate;
   reasoning?: ReasoningSnapshot | null;
+  conversationId?: string;
+  createdAt?: string;
 }
 
 interface ReasoningCondition {
@@ -145,6 +149,8 @@ function mapDbMessage(m: any): Message {
           : "ai",
     text: m.content,
     time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    createdAt: m.created_at,
+    conversationId: metadata?.conversationId || "legacy",
     risk: metadata?.escalation?.risk,
     reasoning: metadata.reasoning || null,
     actions: metadata?.signals?.length
@@ -165,7 +171,10 @@ function mapDbMessage(m: any): Message {
 function ChatPage() {
   const { patientId, displayName } = useAuth();
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState("current");
+  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
+  const [isMobileContextOpen, setIsMobileContextOpen] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [patient, setPatient] = useState<{ id: string; name: string; pinned?: string } | null>(
     null,
@@ -180,6 +189,36 @@ function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedReasoningId, setExpandedReasoningId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const messages = useMemo(
+    () => allMessages.filter((message) => message.conversationId === activeConversationId),
+    [activeConversationId, allMessages],
+  );
+
+  const chatHistory = useMemo(() => {
+    const groups = new Map<string, Message[]>();
+    for (const message of allMessages) {
+      const conversationId = message.conversationId || "legacy";
+      if (!groups.has(conversationId)) groups.set(conversationId, []);
+      groups.get(conversationId)!.push(message);
+    }
+
+    return Array.from(groups.entries())
+      .map(([id, items]) => {
+        const firstPatientMessage = items.find((item) => item.role === "patient");
+        const latest = items[items.length - 1];
+        return {
+          id,
+          count: items.length,
+          latestAt: latest?.createdAt || "",
+          title:
+            id === "legacy"
+              ? "Previous chat"
+              : firstPatientMessage?.text.slice(0, 42) || "New symptom check",
+        };
+      })
+      .sort((a, b) => String(b.latestAt).localeCompare(String(a.latestAt)));
+  }, [allMessages]);
 
   const latestReasoningMessage = useMemo(
     () =>
@@ -216,7 +255,11 @@ function ChatPage() {
         }
 
         if (state.messages) {
-          setMessages(state.messages.map(mapDbMessage));
+          const mappedMessages = state.messages.map(mapDbMessage);
+          setAllMessages(mappedMessages);
+          setActiveConversationId(
+            mappedMessages[mappedMessages.length - 1]?.conversationId || "current",
+          );
         }
 
         setDoctorConnection(state.doctorConnection || null);
@@ -260,7 +303,7 @@ function ChatPage() {
           const row: any = payload.new;
           if (row?.metadata?.type !== "doctor_review_card") return;
 
-          setMessages((prev) => {
+          setAllMessages((prev) => {
             if (prev.some((message) => message.id === row.id)) return prev;
             return [...prev, mapDbMessage(row)];
           });
@@ -280,6 +323,13 @@ function ChatPage() {
     }
   }, [messages]);
 
+  const handleNewChat = () => {
+    setActiveConversationId(`chat_${Date.now()}`);
+    setInput("");
+    setExpandedReasoningId(null);
+    setDoctorReport(null);
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !patient || isSending) return;
@@ -289,9 +339,11 @@ function ChatPage() {
       role: "patient",
       text: input,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      createdAt: new Date().toISOString(),
+      conversationId: activeConversationId,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setAllMessages((prev) => [...prev, userMsg]);
     setExpandedReasoningId(null);
     setInput("");
     setIsSending(true);
@@ -301,16 +353,19 @@ function ChatPage() {
         data: {
           patientId: patient.id,
           message: input,
+          conversationId: activeConversationId,
         },
       });
 
-      setMessages((prev) => [
+      setAllMessages((prev) => [
         ...prev,
         {
           id: aiResponse.id || Math.random().toString(),
           role: "ai",
           text: aiResponse.content,
           time: aiResponse.time,
+          createdAt: new Date().toISOString(),
+          conversationId: activeConversationId,
           risk: aiResponse.risk,
           reasoning: aiResponse.reasoning as ReasoningSnapshot | null,
           actions: aiResponse.memoriesAdded?.length
@@ -425,7 +480,64 @@ function ChatPage() {
   }
 
   return (
-    <div className="grid min-h-[calc(100vh-5rem)] grid-cols-1 lg:min-h-screen lg:grid-cols-[1fr_360px]">
+    <div className="grid min-h-[calc(100vh-5rem)] grid-cols-1 lg:min-h-screen lg:grid-cols-[280px_1fr_360px]">
+      <aside className="hidden border-r border-border bg-card/60 p-4 lg:block">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setIsHistoryOpen((value) => !value)}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-foreground"
+          >
+            <History className="h-4 w-4 text-primary" />
+            Chat history
+          </button>
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground"
+            aria-label="Start new chat"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+
+        {isHistoryOpen ? (
+          <div className="mt-4 space-y-2">
+            <button
+              type="button"
+              onClick={handleNewChat}
+              className="flex w-full items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-primary/15"
+            >
+              <Plus className="h-4 w-4 text-primary" />
+              New symptom check
+            </button>
+            {chatHistory.length ? (
+              chatHistory.map((chat) => (
+                <button
+                  key={chat.id}
+                  type="button"
+                  onClick={() => setActiveConversationId(chat.id)}
+                  className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                    chat.id === activeConversationId
+                      ? "border-primary/40 bg-primary/10"
+                      : "border-border bg-background/60 hover:bg-muted"
+                  }`}
+                >
+                  <div className="truncate text-sm font-medium text-foreground">{chat.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {chat.count} message{chat.count === 1 ? "" : "s"}
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                No chat history yet.
+              </p>
+            )}
+          </div>
+        ) : null}
+      </aside>
+
       {/* Conversation */}
       <div className="flex h-[calc(100vh-5rem)] flex-col border-r border-border lg:h-screen">
         <header className="flex flex-col gap-4 border-b border-border bg-card px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:py-5">
@@ -438,6 +550,20 @@ function ChatPage() {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleNewChat}
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary lg:hidden"
+            >
+              <Plus className="h-3.5 w-3.5" /> New chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsMobileContextOpen((value) => !value)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground lg:hidden"
+            >
+              <BarChart3 className="h-3.5 w-3.5" /> Context
+            </button>
             {doctorConnection?.doctorName ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />{" "}
@@ -473,6 +599,80 @@ function ChatPage() {
             )}
           </div>
         </header>
+
+        <div className="border-b border-border bg-card/70 px-4 py-3 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setIsHistoryOpen((value) => !value)}
+            className="flex w-full items-center justify-between text-sm font-semibold text-foreground"
+          >
+            <span className="inline-flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              Chat history
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform ${
+                isHistoryOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+          {isHistoryOpen ? (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-foreground"
+              >
+                <Plus className="h-4 w-4 text-primary" />
+                New
+              </button>
+              {chatHistory.map((chat) => (
+                <button
+                  key={chat.id}
+                  type="button"
+                  onClick={() => setActiveConversationId(chat.id)}
+                  className={`min-w-40 shrink-0 rounded-md border px-3 py-2 text-left ${
+                    chat.id === activeConversationId
+                      ? "border-primary/40 bg-primary/10"
+                      : "border-border bg-background/60"
+                  }`}
+                >
+                  <div className="truncate text-xs font-medium text-foreground">{chat.title}</div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    {chat.count} message{chat.count === 1 ? "" : "s"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {isMobileContextOpen ? (
+          <div className="max-h-[45vh] overflow-y-auto border-b border-border bg-surface px-4 py-4 lg:hidden">
+            <LiveReasoningPanel
+              reasoning={latestReasoningMessage?.reasoning || null}
+              isThinking={isSending}
+              onViewDetails={() => {
+                if (latestReasoningMessage?.id) setExpandedReasoningId(latestReasoningMessage.id);
+              }}
+            />
+            <div className="mt-4 rounded-lg border border-border bg-card p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Active context
+              </div>
+              <div className="mt-3 grid gap-2 text-xs">
+                <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2 text-foreground">
+                  <UserRound className="h-3.5 w-3.5 text-primary" />
+                  {patient.name}
+                </div>
+                <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2 text-foreground">
+                  <Brain className="h-3.5 w-3.5 text-primary" />
+                  {memories.length} memory item{memories.length === 1 ? "" : "s"}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div
           ref={scrollRef}

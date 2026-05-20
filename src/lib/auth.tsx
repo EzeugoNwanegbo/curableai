@@ -12,6 +12,10 @@ interface RefreshPatientInput {
   bloodGroup?: string;
   genotype?: string;
   occupation?: string;
+  location?: string;
+  averageWaterDaily?: string;
+  exerciseFrequency?: string;
+  exerciseType?: string;
   allergies?: string[];
   conditions?: string[];
 }
@@ -70,6 +74,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         bloodGroup: profile?.bloodGroup,
         genotype: profile?.genotype,
         occupation: profile?.occupation,
+        location: profile?.location,
+        averageWaterDaily: profile?.averageWaterDaily,
+        exerciseFrequency: profile?.exerciseFrequency,
+        exerciseType: profile?.exerciseType,
         allergies: profile?.allergies,
         conditions: profile?.conditions,
       },
@@ -136,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setPatientId(null);
       },
     }),
-    [authError, displayName, isLoading, patientId, role, session, user]
+    [authError, displayName, isLoading, patientId, role, session, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

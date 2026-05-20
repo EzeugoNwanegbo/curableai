@@ -72,6 +72,10 @@ function AuthPage() {
     const bloodGroup = readField("bloodGroup");
     const genotype = readField("genotype");
     const occupation = readField("occupation");
+    const location = readField("location");
+    const averageWaterDaily = readField("averageWaterDaily");
+    const exerciseFrequency = readField("exerciseFrequency");
+    const exerciseType = readField("exerciseType");
 
     setIsSubmitting(true);
     setError(null);
@@ -93,9 +97,12 @@ function AuthPage() {
       if (mode === "signup" && role === "patient") {
         if (!age || age < 1) throw new Error("Add your age.");
         if (!sex) throw new Error("Select your sex.");
+        if (!location) throw new Error("Add your location.");
         if (!occupation) throw new Error("Add your occupation.");
         if (!bloodGroup) throw new Error("Select your blood group.");
         if (!genotype) throw new Error("Select your genotype.");
+        if (!averageWaterDaily) throw new Error("Select your average daily water intake.");
+        if (!exerciseFrequency) throw new Error("Select how often you exercise.");
       }
 
       if (mode === "signup") {
@@ -111,6 +118,10 @@ function AuthPage() {
               blood_group: bloodGroup,
               genotype,
               occupation,
+              location,
+              average_water_daily: averageWaterDaily,
+              exercise_frequency: exerciseFrequency,
+              exercise_type: exerciseType,
             },
           },
         });
@@ -127,6 +138,10 @@ function AuthPage() {
               bloodGroup,
               genotype,
               occupation,
+              location,
+              averageWaterDaily,
+              exerciseFrequency,
+              exerciseType,
             },
           });
         }
@@ -361,6 +376,14 @@ function AuthPage() {
                       </select>
                     </label>
                     <label className="text-sm sm:col-span-2">
+                      <span className="text-xs font-medium text-muted-foreground">Location</span>
+                      <input
+                        name="location"
+                        placeholder="City, state, or country"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                      />
+                    </label>
+                    <label className="text-sm sm:col-span-2">
                       <span className="text-xs font-medium text-muted-foreground">Occupation</span>
                       <input
                         name="occupation"
@@ -399,6 +422,49 @@ function AuthPage() {
                           </option>
                         ))}
                       </select>
+                    </label>
+                    <label className="text-sm">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Water per day
+                      </span>
+                      <select
+                        name="averageWaterDaily"
+                        defaultValue=""
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                      >
+                        <option value="">Select</option>
+                        <option value="Less than 1 liter">Less than 1 liter</option>
+                        <option value="1-2 liters">1-2 liters</option>
+                        <option value="2-3 liters">2-3 liters</option>
+                        <option value="More than 3 liters">More than 3 liters</option>
+                        <option value="Not sure">Not sure</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Exercise per week
+                      </span>
+                      <select
+                        name="exerciseFrequency"
+                        defaultValue=""
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                      >
+                        <option value="">Select</option>
+                        <option value="0 times per week">0 times</option>
+                        <option value="1-2 times per week">1-2 times</option>
+                        <option value="3-4 times per week">3-4 times</option>
+                        <option value="5 or more times per week">5+ times</option>
+                      </select>
+                    </label>
+                    <label className="text-sm sm:col-span-2">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Exercise type
+                      </span>
+                      <input
+                        name="exerciseType"
+                        placeholder="Walking, gym, football, none, etc."
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                      />
                     </label>
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-muted-foreground">

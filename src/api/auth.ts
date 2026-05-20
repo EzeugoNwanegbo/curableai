@@ -9,6 +9,10 @@ const patientProfileSchema = z.object({
   bloodGroup: z.string().optional(),
   genotype: z.string().optional(),
   occupation: z.string().optional(),
+  location: z.string().optional(),
+  averageWaterDaily: z.string().optional(),
+  exerciseFrequency: z.string().optional(),
+  exerciseType: z.string().optional(),
   allergies: z.array(z.string()).optional(),
   conditions: z.array(z.string()).optional(),
 });
@@ -61,11 +65,27 @@ async function upsertProfileMemoryFact(
 async function saveStructuredProfileMemory(
   client: any,
   patientId: string,
-  input: { genotype?: string; occupation?: string },
+  input: {
+    genotype?: string;
+    occupation?: string;
+    location?: string;
+    averageWaterDaily?: string;
+    exerciseFrequency?: string;
+    exerciseType?: string;
+  },
 ) {
   await Promise.all([
     upsertProfileMemoryFact(client, patientId, "Genotype", input.genotype),
     upsertProfileMemoryFact(client, patientId, "Occupation", input.occupation),
+    upsertProfileMemoryFact(client, patientId, "Location", input.location),
+    upsertProfileMemoryFact(
+      client,
+      patientId,
+      "Average daily water intake",
+      input.averageWaterDaily,
+    ),
+    upsertProfileMemoryFact(client, patientId, "Exercise frequency", input.exerciseFrequency),
+    upsertProfileMemoryFact(client, patientId, "Exercise type", input.exerciseType),
   ]);
 }
 
@@ -92,6 +112,10 @@ export const ensurePatientAccount = createServerFn({
   const bloodGroup = data.bloodGroup?.trim() || metadata.blood_group || "";
   const genotype = data.genotype?.trim() || metadata.genotype || "";
   const occupation = data.occupation?.trim() || metadata.occupation || "";
+  const location = data.location?.trim() || metadata.location || "";
+  const averageWaterDaily = data.averageWaterDaily?.trim() || metadata.average_water_daily || "";
+  const exerciseFrequency = data.exerciseFrequency?.trim() || metadata.exercise_frequency || "";
+  const exerciseType = data.exerciseType?.trim() || metadata.exercise_type || "";
   const allergies = data.allergies?.length
     ? data.allergies
     : Array.isArray(metadata.allergies)
@@ -140,11 +164,25 @@ export const ensurePatientAccount = createServerFn({
         .single();
 
       if (updateError) throw updateError;
-      await saveStructuredProfileMemory(client, user.id, { genotype, occupation });
+      await saveStructuredProfileMemory(client, user.id, {
+        genotype,
+        occupation,
+        location,
+        averageWaterDaily,
+        exerciseFrequency,
+        exerciseType,
+      });
       return updated;
     }
 
-    await saveStructuredProfileMemory(client, user.id, { genotype, occupation });
+    await saveStructuredProfileMemory(client, user.id, {
+      genotype,
+      occupation,
+      location,
+      averageWaterDaily,
+      exerciseFrequency,
+      exerciseType,
+    });
     return existing;
   }
 
@@ -167,7 +205,14 @@ export const ensurePatientAccount = createServerFn({
     .single();
 
   if (insertError) throw insertError;
-  await saveStructuredProfileMemory(client, user.id, { genotype, occupation });
+  await saveStructuredProfileMemory(client, user.id, {
+    genotype,
+    occupation,
+    location,
+    averageWaterDaily,
+    exerciseFrequency,
+    exerciseType,
+  });
 
   return inserted;
 });

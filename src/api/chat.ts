@@ -738,8 +738,9 @@ export const sendMessage = createServerFn({
   validator: z.object({
     patientId: z.string().uuid(),
     message: z.string(),
+    conversationId: z.string().optional(),
   }),
-}).handler(async ({ data: { patientId, message } }) => {
+}).handler(async ({ data: { patientId, message, conversationId } }) => {
   // Move server-only imports inside the handler
   const { OpenAI } = await import("openai");
   const { supabase, supabaseAdmin } = await import("@/lib/supabase");
@@ -756,6 +757,17 @@ export const sendMessage = createServerFn({
     : null;
 
   // 1. Fetch Patient Context
+  const recentMessagesQuery = client
+    .from("messages")
+    .select("role, content, created_at")
+    .eq("patient_id", patientId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (conversationId) {
+    recentMessagesQuery.contains("metadata", { conversationId });
+  }
+
   const [{ data: patient }, { data: memory }, { data: recentMessages }] = await Promise.all([
     client.from("patients").select("*").eq("id", patientId).single(),
     client
@@ -764,12 +776,7 @@ export const sendMessage = createServerFn({
       .eq("patient_id", patientId)
       .order("created_at", { ascending: false })
       .limit(24),
-    client
-      .from("messages")
-      .select("role, content, created_at")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: false })
-      .limit(10),
+    recentMessagesQuery,
   ]);
 
   if (!patient) throw new Error("Patient not found");
@@ -778,6 +785,7 @@ export const sendMessage = createServerFn({
     patient_id: patientId,
     role: "patient",
     content: message,
+    metadata: conversationId ? { conversationId } : {},
   });
   if (patientMessageError) throw patientMessageError;
 
@@ -962,7 +970,7 @@ Example:
       patient_id: patientId,
       role: "ai",
       content: cleanContent,
-      metadata: { signals, escalation, reasoning, original_content: fullContent },
+      metadata: { signals, escalation, reasoning, original_content: fullContent, conversationId },
     })
     .select()
     .single();
