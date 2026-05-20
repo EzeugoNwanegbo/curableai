@@ -481,7 +481,7 @@ function ChatPage() {
 
   return (
     <div
-      className={`grid min-h-[calc(100vh-5rem)] grid-cols-1 lg:min-h-screen ${
+      className={`grid min-h-screen grid-cols-1 ${
         isHistoryOpen ? "lg:grid-cols-[280px_1fr_360px]" : "lg:grid-cols-[72px_1fr_360px]"
       }`}
     >
@@ -575,7 +575,7 @@ function ChatPage() {
       </aside>
 
       {/* Conversation */}
-      <div className="flex h-[calc(100vh-5rem)] flex-col border-r border-border lg:h-screen">
+      <div className="flex h-screen flex-col border-r border-border">
         <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-5">
           <div className="hidden lg:block">
             <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">

@@ -7,10 +7,12 @@ import {
   MessageSquare,
   Home,
   LogOut,
+  Menu,
   ShieldAlert,
   PanelLeftClose,
   PanelLeftOpen,
   UserPlus,
+  X,
 } from "lucide-react";
 import { useAuth, type UserRole } from "@/lib/auth";
 
@@ -40,6 +42,7 @@ export function AppShell() {
   const location = useLocation();
   const auth = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const isAuthPage = location.pathname === "/auth";
   const needsAuth = !publicPaths.has(location.pathname);
 
@@ -107,7 +110,7 @@ export function AppShell() {
   const mobileNav = nav.slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-background pb-20 lg:pb-0">
+    <div className="min-h-screen bg-background">
       <aside
         className={`fixed left-0 top-0 hidden h-screen flex-col border-r border-border bg-card/90 py-7 shadow-elegant backdrop-blur transition-[width] duration-200 lg:flex ${
           isMenuOpen ? "w-72 px-5" : "w-[72px] px-3"
@@ -213,15 +216,50 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-2 py-2 shadow-deep backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+      {isMobileNavOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-background/55 backdrop-blur-[1px] lg:hidden"
+          aria-label="Close navigation"
+          onClick={() => setIsMobileNavOpen(false)}
+        />
+      ) : null}
+
+      <button
+        type="button"
+        onClick={() => setIsMobileNavOpen((value) => !value)}
+        className="fixed left-3 top-1/2 z-50 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-deep transition-colors hover:bg-muted lg:hidden"
+        aria-label={isMobileNavOpen ? "Close navigation" : "Open navigation"}
+        aria-expanded={isMobileNavOpen}
+      >
+        {isMobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+      </button>
+
+      <nav
+        className={`fixed left-16 top-1/2 z-50 w-60 -translate-y-1/2 rounded-lg border border-border bg-card p-2 shadow-deep transition-all duration-200 lg:hidden ${
+          isMobileNavOpen
+            ? "pointer-events-auto translate-x-0 opacity-100"
+            : "pointer-events-none -translate-x-3 opacity-0"
+        }`}
+        aria-label="Mobile navigation"
+      >
+        <div className="mb-2 flex items-center justify-between border-b border-border px-2 pb-2">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Curable</div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Navigation
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-1">
           {mobileNav.map(({ to, label, icon: Icon }) => {
             const active = location.pathname === to;
             return (
               <Link
                 key={to}
                 to={to}
-                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-semibold transition-colors ${
+                onClick={() => setIsMobileNavOpen(false)}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   active
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
