@@ -29,6 +29,32 @@ function AuthPage() {
     void navigate({ to: auth.role === "doctor" ? "/doctor" : "/chat" });
   }, [auth.isLoading, auth.role, auth.session, navigate]);
 
+  const handleGoogleAuth = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const redirectTo =
+        typeof window !== "undefined" ? `${window.location.origin}/auth` : undefined;
+      const { error: googleError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+
+      if (googleError) throw googleError;
+    } catch (err: any) {
+      setError(err.message || "Could not continue with Google.");
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -218,6 +244,26 @@ function AuthPage() {
                   ? "Use your Curable account details."
                   : "Choose whether this account is for a patient or doctor."}
               </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void handleGoogleAuth()}
+              disabled={isSubmitting}
+              className="mt-5 inline-flex w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-card text-xs font-bold text-foreground">
+                G
+              </span>
+              Continue with Google
+            </button>
+
+            <div className="mt-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-border" />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Or use email
+              </span>
+              <span className="h-px flex-1 bg-border" />
             </div>
 
             {mode === "signup" ? (
