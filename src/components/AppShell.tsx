@@ -212,7 +212,7 @@ export function AppShell() {
         ) : null}
       </aside>
 
-      <main className={isMenuOpen ? "lg:pl-72" : "lg:pl-[72px]"}>
+      <main className={`${isMenuOpen ? "lg:pl-72" : "lg:pl-[72px]"} pt-14 lg:pt-0`}>
         <Outlet />
       </main>
 
@@ -228,7 +228,7 @@ export function AppShell() {
       <button
         type="button"
         onClick={() => setIsMobileNavOpen((value) => !value)}
-        className="fixed left-3 top-1/2 z-50 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-deep transition-colors hover:bg-muted lg:hidden"
+        className="fixed left-3 top-3 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-deep transition-colors hover:bg-muted lg:hidden"
         aria-label={isMobileNavOpen ? "Close navigation" : "Open navigation"}
         aria-expanded={isMobileNavOpen}
       >
@@ -236,7 +236,7 @@ export function AppShell() {
       </button>
 
       <nav
-        className={`fixed left-16 top-1/2 z-50 w-60 -translate-y-1/2 rounded-lg border border-border bg-card p-2 shadow-deep transition-all duration-200 lg:hidden ${
+        className={`fixed left-3 top-16 z-50 w-60 rounded-lg border border-border bg-card p-2 shadow-deep transition-all duration-200 lg:hidden ${
           isMobileNavOpen
             ? "pointer-events-auto translate-x-0 opacity-100"
             : "pointer-events-none -translate-x-3 opacity-0"

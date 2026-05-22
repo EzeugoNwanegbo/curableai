@@ -1,6 +1,22 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, Send, ShieldAlert, Stethoscope, UserRound, FileText, UserPlus, Save, Trash2 } from "lucide-react";
+import {
+  ArrowRight,
+  BadgeCheck,
+  Banknote,
+  Building2,
+  Clock3,
+  FileText,
+  Loader2,
+  Save,
+  Send,
+  ShieldAlert,
+  Sparkles,
+  Stethoscope,
+  Trash2,
+  UserPlus,
+  UserRound,
+} from "lucide-react";
 import { RiskBadge } from "@/components/RiskBadge";
 import { getActiveConsultation, getConsultationMessages, sendConsultationMessage } from "@/api/consultation";
 import { getPatientDoctorConnection, removePatientDoctorConnection, savePatientDoctorConnection } from "@/api/doctor-connection";
@@ -224,34 +240,7 @@ function ConsultationPage() {
 
   if (!consultation) {
     return (
-      <div className="container-page min-h-screen py-10">
-        <div className="grid min-h-[70vh] items-center gap-6 lg:grid-cols-[420px_1fr]">
-          {role === "patient" ? (
-            <DoctorConnectionCard
-              connection={doctorConnection}
-              form={doctorForm}
-              setForm={setDoctorForm}
-              isSaving={isSavingDoctor}
-              notice={doctorNotice}
-              onSave={saveDoctor}
-              onRemove={removeDoctor}
-            />
-          ) : null}
-          <div className="rounded-lg border border-border bg-card p-8 text-center shadow-elegant">
-            <Stethoscope className="mx-auto h-10 w-10 text-primary" />
-            <h1 className="mt-4 font-serif text-2xl text-foreground">No active doctor consultation</h1>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              When a doctor starts a consultation from your report, it will appear here as a separate
-              doctor-patient room.
-            </p>
-            {role === "patient" && doctorConnection?.doctorName ? (
-              <p className="mt-4 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
-                {doctorConnection.doctorName} is saved as your validating doctor.
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </div>
+      <DoctorValidationComingSoon role={role} />
     );
   }
 
@@ -375,6 +364,162 @@ function ConsultationPage() {
           </form>
         ) : null}
       </aside>
+    </div>
+  );
+}
+
+const targetHospitals = [
+  "National Hospital Abuja",
+  "Garki Hospital Abuja",
+  "Nisa Premier Hospital",
+  "Cedarcrest Hospitals Abuja",
+  "Abuja Clinics",
+];
+
+function DoctorValidationComingSoon({ role }: { role: "patient" | "doctor" | null }) {
+  const patientBenefits = [
+    "Doctor validation of Curable's AI reasoning before you act on it.",
+    "Doctor suggestions on safer next steps, tests to consider, or when to visit a clinic.",
+    "A structured report, not a raw chat dump, so the doctor can review faster.",
+  ];
+
+  const doctorBenefits = [
+    "Review clear AI-generated summaries instead of long unstructured messages.",
+    "Give focused validation or correction from your phone during free time.",
+    "Get paid for useful medical advice without running a full telemedicine session.",
+  ];
+
+  return (
+    <div className="min-h-screen bg-background">
+      <section className="container-page py-8 sm:py-12">
+        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-elegant sm:p-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <Sparkles className="h-3.5 w-3.5" /> Doctor validation is coming soon
+            </div>
+
+            <h1 className="mt-5 font-serif text-3xl leading-tight text-foreground sm:text-4xl">
+              Get Curable's AI suggestions reviewed by doctors practicing around top Abuja
+              hospitals.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Curable is building a paid doctor-validation layer for users who want a professional
+              second look after the AI explains possible causes and safer next steps.
+            </p>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border border-border bg-surface p-4">
+                <Banknote className="h-4 w-4 text-primary" />
+                <div className="mt-2 text-sm font-semibold text-foreground">NGN 1,000</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Planned launch price per doctor review.
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-surface p-4">
+                <FileText className="h-4 w-4 text-primary" />
+                <div className="mt-2 text-sm font-semibold text-foreground">Structured report</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Doctors review summaries, reasoning, and context.
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-surface p-4">
+                <Clock3 className="h-4 w-4 text-primary" />
+                <div className="mt-2 text-sm font-semibold text-foreground">Coming soon</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Payments open when the doctor network is ready.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-md border border-gold/40 bg-gold/10 p-4">
+              <div className="text-sm font-semibold text-foreground">
+                Abuja doctor network in progress
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                We are not showing individual doctors yet. The first version is being positioned
+                around doctors who practice in Abuja, with target coverage across hospitals such as:
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {targetHospitals.map((hospital) => (
+                  <div
+                    key={hospital}
+                    className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
+                  >
+                    <Building2 className="h-3.5 w-3.5 text-primary" />
+                    {hospital}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              {role === "doctor" ? (
+                <Link
+                  to="/doctor"
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-accent"
+                >
+                  Open doctor dashboard <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : (
+                <Link
+                  to="/chat"
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-accent"
+                >
+                  Continue with AI chat <ArrowRight className="h-4 w-4" />
+                </Link>
+              )}
+              <Link
+                to="/auth"
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted"
+              >
+                Doctor sign-up
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            <section className="rounded-lg border border-border bg-card p-5 shadow-elegant">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                <UserRound className="h-3.5 w-3.5 text-primary" /> For patients
+              </div>
+              <h2 className="mt-2 font-serif text-xl text-foreground">Pay for a second look</h2>
+              <div className="mt-4 grid gap-3">
+                {patientBenefits.map((benefit) => (
+                  <div key={benefit} className="flex gap-3 text-sm leading-relaxed text-foreground">
+                    <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    {benefit}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-border bg-card p-5 shadow-elegant">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                <Stethoscope className="h-3.5 w-3.5 text-primary" /> For doctors
+              </div>
+              <h2 className="mt-2 font-serif text-xl text-foreground">
+                Get paid for focused validation
+              </h2>
+              <div className="mt-4 grid gap-3">
+                {doctorBenefits.map((benefit) => (
+                  <div key={benefit} className="flex gap-3 text-sm leading-relaxed text-foreground">
+                    <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    {benefit}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-accent/30 bg-accent/5 p-5">
+              <div className="text-sm font-semibold text-foreground">What happens now?</div>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Keep using Curable AI for symptom reasoning. When doctor validation launches, this
+                page will become the payment and doctor-review entry point.
+              </p>
+            </section>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -321,7 +321,7 @@ function ChatPage() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [isSending, messages]);
 
   const handleNewChat = () => {
     setActiveConversationId(`chat_${Date.now()}`);
@@ -481,7 +481,7 @@ function ChatPage() {
 
   return (
     <div
-      className={`grid min-h-screen grid-cols-1 ${
+      className={`grid min-h-[calc(100vh-3.5rem)] grid-cols-1 lg:min-h-screen ${
         isHistoryOpen ? "lg:grid-cols-[280px_1fr_360px]" : "lg:grid-cols-[72px_1fr_360px]"
       }`}
     >
@@ -550,38 +550,14 @@ function ChatPage() {
               </p>
             )}
           </div>
-        ) : (
-          <div className="mt-4 flex flex-col items-center gap-2">
-            {chatHistory.slice(0, 5).map((chat, index) => (
-              <button
-                key={chat.id}
-                type="button"
-                onClick={() => {
-                  setActiveConversationId(chat.id);
-                  setIsHistoryOpen(true);
-                }}
-                className={`flex h-9 w-9 items-center justify-center rounded-md border text-xs font-semibold ${
-                  chat.id === activeConversationId
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border bg-background/60 text-muted-foreground hover:bg-muted"
-                }`}
-                title={chat.title}
-              >
-                {index + 1}
-              </button>
-            ))}
-          </div>
-        )}
+        ) : null}
       </aside>
 
       {/* Conversation */}
-      <div className="flex h-screen flex-col border-r border-border">
+      <div className="flex h-[calc(100vh-3.5rem)] flex-col border-r border-border lg:h-screen">
         <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-5">
           <div className="hidden lg:block">
-            <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-              Page 01
-            </div>
-            <h1 className="mt-1 font-serif text-xl text-foreground">
+            <h1 className="font-serif text-xl text-foreground">
               AI Follow-up · {patient.name}
             </h1>
           </div>
@@ -745,9 +721,7 @@ function ChatPage() {
           ))}
 
           {isSending && (
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-              <Sparkles className="h-3 w-3 animate-pulse text-gold" /> AI is thinking...
-            </div>
+            <TypingIndicator />
           )}
 
           {reportError ? (
@@ -945,6 +919,26 @@ function barColor(index: number) {
   if (index === 1) return "bg-accent";
   if (index === 2) return "bg-gold";
   return "bg-success";
+}
+
+function TypingIndicator() {
+  return (
+    <div className="w-full">
+      <div className="mb-1.5 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+        <Sparkles className="h-3 w-3 animate-pulse text-gold" /> Curable AI is typing
+      </div>
+      <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-3 text-card-foreground">
+        <span className="sr-only">Curable AI is typing</span>
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="h-2 w-2 animate-bounce rounded-full bg-primary"
+            style={{ animationDelay: `${index * 120}ms` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ReasoningBars({ conditions }: { conditions: ReasoningCondition[] }) {

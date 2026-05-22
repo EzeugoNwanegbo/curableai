@@ -15,6 +15,13 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+function readListField(value: string) {
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter((item) => item && !/^(none|no|n\/a|na)$/i.test(item));
+}
+
 function AuthPage() {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -76,6 +83,8 @@ function AuthPage() {
     const averageWaterDaily = readField("averageWaterDaily");
     const exerciseFrequency = readField("exerciseFrequency");
     const exerciseType = readField("exerciseType");
+    const allergies = readListField(readField("allergies"));
+    const conditions = readListField(readField("conditions"));
 
     setIsSubmitting(true);
     setError(null);
@@ -122,6 +131,8 @@ function AuthPage() {
               average_water_daily: averageWaterDaily,
               exercise_frequency: exerciseFrequency,
               exercise_type: exerciseType,
+              allergies,
+              conditions,
             },
           },
         });
@@ -142,6 +153,8 @@ function AuthPage() {
               averageWaterDaily,
               exerciseFrequency,
               exerciseType,
+              allergies,
+              conditions,
             },
           });
         }
@@ -463,6 +476,26 @@ function AuthPage() {
                       <input
                         name="exerciseType"
                         placeholder="Walking, gym, football, none, etc."
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                      />
+                    </label>
+                    <label className="text-sm sm:col-span-2">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Allergies
+                      </span>
+                      <input
+                        name="allergies"
+                        placeholder="Penicillin, peanuts, dust, or none"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                      />
+                    </label>
+                    <label className="text-sm sm:col-span-2">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Known conditions
+                      </span>
+                      <input
+                        name="conditions"
+                        placeholder="Asthma, hypertension, diabetes, or none"
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
                       />
                     </label>
