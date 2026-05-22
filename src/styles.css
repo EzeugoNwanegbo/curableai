@@ -206,52 +206,6 @@
     transform-origin: center;
   }
 
-  .curable-loader__cross {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    z-index: 2;
-    height: 2.3rem;
-    width: 2.3rem;
-    border-radius: 0.6rem;
-    background:
-      linear-gradient(var(--color-primary-foreground), var(--color-primary-foreground)) center / 34% 86% no-repeat,
-      linear-gradient(var(--color-primary-foreground), var(--color-primary-foreground)) center / 86% 34% no-repeat,
-      linear-gradient(135deg, var(--color-primary), var(--color-accent));
-    box-shadow:
-      0 0 0 1px oklch(0.99 0.004 220 / 0.18),
-      0 12px 28px -18px oklch(0.78 0.19 145 / 0.9);
-    transform: translate(-50%, -50%);
-    animation: curable-loader-cross 1.75s ease-in-out infinite;
-  }
-
-  .curable-loader__snake {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    height: 100%;
-    width: 100%;
-    fill: none;
-    stroke: oklch(0.97 0.03 150 / 0.76);
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 4;
-    filter: drop-shadow(0 0 12px oklch(0.78 0.19 145 / 0.35));
-    opacity: 0.86;
-  }
-
-  .curable-loader__snake path {
-    stroke-dasharray: 170;
-    stroke-dashoffset: 170;
-    animation: curable-loader-draw 1.75s ease-in-out infinite;
-  }
-
-  .curable-loader__snake path + path {
-    stroke: oklch(0.91 0.08 190 / 0.72);
-    stroke-width: 3;
-    animation-delay: 180ms;
-  }
-
   @keyframes curable-loader-form {
     0% {
       opacity: 0;
@@ -270,42 +224,6 @@
     }
   }
 
-  @keyframes curable-loader-cross {
-    0% {
-      opacity: 0;
-      transform: translate(-50%, -50%) scale(0.72);
-    }
-
-    34%,
-    72% {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
-
-    100% {
-      opacity: 0.7;
-      transform: translate(-50%, -50%) scale(0.92);
-    }
-  }
-
-  @keyframes curable-loader-draw {
-    0% {
-      stroke-dashoffset: 170;
-      opacity: 0;
-    }
-
-    36%,
-    76% {
-      stroke-dashoffset: 0;
-      opacity: 0.86;
-    }
-
-    100% {
-      stroke-dashoffset: -170;
-      opacity: 0.3;
-    }
-  }
-
   @keyframes curable-loader-spin {
     to {
       transform: rotate(360deg);
@@ -314,9 +232,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .curable-loader__glow,
-    .curable-loader__tile,
-    .curable-loader__cross,
-    .curable-loader__snake path {
+    .curable-loader__tile {
       animation: none;
     }
   }
