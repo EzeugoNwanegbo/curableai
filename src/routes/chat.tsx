@@ -26,7 +26,6 @@ import {
   sendDoctorReviewReport,
   sendMessage,
 } from "@/api/chat";
-import { CurableLoader } from "@/components/CurableLoader";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
@@ -467,9 +466,12 @@ function ChatPage() {
     );
   }
 
-  if (!patient) {
-    return <CurableLoader message="Preparing your health chat..." />;
-  }
+  const displayPatient = patient || {
+    id: patientId || "",
+    name: displayName || "Curable user",
+    pinned: "",
+  };
+  const isChatPreparing = chatStateQuery.isLoading && !patient;
 
   return (
     <div
@@ -550,7 +552,7 @@ function ChatPage() {
         <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-5">
           <div className="hidden lg:block">
             <h1 className="font-serif text-xl text-foreground">
-              AI Follow-up · {patient.name}
+              AI Follow-up · {displayPatient.name}
             </h1>
           </div>
           <button
@@ -652,7 +654,7 @@ function ChatPage() {
               <div className="mt-3 grid gap-2 text-xs">
                 <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2 text-foreground">
                   <UserRound className="h-3.5 w-3.5 text-primary" />
-                  {patient.name}
+                  {displayPatient.name}
                 </div>
                 <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2 text-foreground">
                   <Brain className="h-3.5 w-3.5 text-primary" />
@@ -667,6 +669,8 @@ function ChatPage() {
           ref={scrollRef}
           className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
         >
+          {isChatPreparing ? <ChatLoadingSkeleton /> : null}
+
           {messages.map((m) => (
             <div key={m.id} className={m.role === "patient" ? "flex justify-end" : ""}>
               <div className={`${m.role === "patient" ? "max-w-[88%] sm:max-w-[78%]" : "w-full"}`}>
@@ -802,11 +806,11 @@ function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Describe a symptom, ask a question…"
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              disabled={isSending}
+              disabled={isSending || !patient}
             />
             <button
               type="submit"
-              disabled={isSending}
+              disabled={isSending || !patient}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-accent disabled:opacity-50"
               aria-label="Send"
             >
@@ -853,12 +857,12 @@ function ChatPage() {
           </div>
         </div>
 
-        {patient.pinned && (
+        {displayPatient.pinned && (
           <div className="mt-5 rounded-md border border-gold/40 bg-gold/10 p-3 text-sm">
             <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-gold-foreground/80">
               <BookmarkCheck className="h-3 w-3" /> Doctor-pinned
             </div>
-            <p className="mt-1 leading-relaxed text-foreground">{patient.pinned}</p>
+            <p className="mt-1 leading-relaxed text-foreground">{displayPatient.pinned}</p>
           </div>
         )}
 
@@ -911,6 +915,30 @@ function barColor(index: number) {
   if (index === 1) return "bg-accent";
   if (index === 2) return "bg-gold";
   return "bg-success";
+}
+
+function ChatLoadingSkeleton() {
+  return (
+    <div className="space-y-5" aria-label="Loading chat">
+      <div className="w-full">
+        <div className="mb-1.5 h-3 w-32 animate-pulse rounded bg-muted" />
+        <div className="rounded-lg border border-border bg-card px-4 py-3">
+          <div className="h-3 w-11/12 animate-pulse rounded bg-muted" />
+          <div className="mt-2 h-3 w-2/3 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <div className="h-10 w-56 max-w-[78%] animate-pulse rounded-lg bg-primary/25" />
+      </div>
+      <div className="w-full">
+        <div className="mb-1.5 h-3 w-28 animate-pulse rounded bg-muted" />
+        <div className="rounded-lg border border-border bg-card px-4 py-3">
+          <div className="h-3 w-10/12 animate-pulse rounded bg-muted" />
+          <div className="mt-2 h-3 w-7/12 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TypingIndicator() {
