@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Check, MessageSquare, Search, Clock, Loader2, ShieldAlert } from "lucide-react";
+import { Check, MessageSquare, Search, Clock, ShieldAlert } from "lucide-react";
+import { CurableLoader } from "@/components/CurableLoader";
 import { RiskBadge } from "@/components/RiskBadge";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -245,14 +246,7 @@ function DoctorPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="font-serif text-lg text-muted-foreground">Loading review queue...</p>
-        </div>
-      </div>
-    );
+    return <CurableLoader message="Loading review queue..." />;
   }
 
   if (error) {

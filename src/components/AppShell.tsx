@@ -14,6 +14,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { CurableLoader } from "@/components/CurableLoader";
 import { useAuth, type UserRole } from "@/lib/auth";
 
 const patientNav = [
@@ -67,7 +68,7 @@ export function AppShell() {
   }
 
   if (auth.isLoading && needsAuth && !auth.role) {
-    return <div className="min-h-screen bg-background" aria-hidden="true" />;
+    return <CurableLoader message="Getting Curable ready..." />;
   }
 
   if (needsAuth && !auth.session) {

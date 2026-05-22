@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Pin, Loader2, ShieldAlert, Brain, Pencil, Trash2, Save, X } from "lucide-react";
+import { Pin, ShieldAlert, Brain, Pencil, Trash2, Save, X } from "lucide-react";
+import { CurableLoader } from "@/components/CurableLoader";
 import { deletePatientMemoryFact, getPatientProfileState, updatePatientMemoryFact } from "@/api/auth";
 import { useAuth } from "@/lib/auth";
 
@@ -149,14 +150,7 @@ function ProfilePage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="font-serif text-lg text-muted-foreground">Loading medical profile...</p>
-        </div>
-      </div>
-    );
+    return <CurableLoader message="Loading medical profile..." />;
   }
 
   if (error || !patient) {

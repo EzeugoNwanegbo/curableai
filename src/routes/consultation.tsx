@@ -7,7 +7,6 @@ import {
   Building2,
   Clock3,
   FileText,
-  Loader2,
   Save,
   Send,
   ShieldAlert,
@@ -17,6 +16,7 @@ import {
   UserPlus,
   UserRound,
 } from "lucide-react";
+import { CurableLoader } from "@/components/CurableLoader";
 import { RiskBadge } from "@/components/RiskBadge";
 import { getActiveConsultation, getConsultationMessages, sendConsultationMessage } from "@/api/consultation";
 import { getPatientDoctorConnection, removePatientDoctorConnection, savePatientDoctorConnection } from "@/api/doctor-connection";
@@ -218,14 +218,7 @@ function ConsultationPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="font-serif text-lg text-muted-foreground">Opening doctor consultation...</p>
-        </div>
-      </div>
-    );
+    return <CurableLoader message="Opening doctor consultation..." />;
   }
 
   if (error) {
