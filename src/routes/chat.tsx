@@ -25,6 +25,7 @@ import {
   sendDoctorReviewReport,
   sendMessage,
 } from "@/api/chat";
+import { CurableLoader } from "@/components/CurableLoader";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
@@ -469,14 +470,7 @@ function ChatPage() {
   }
 
   if (!patient) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="font-serif text-lg text-muted-foreground">Initializing Curable AI...</p>
-        </div>
-      </div>
-    );
+    return <CurableLoader message="Preparing your health chat..." />;
   }
 
   return (
