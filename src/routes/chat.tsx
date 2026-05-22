@@ -190,6 +190,7 @@ function ChatPage() {
   const [reportError, setReportError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedReasoningId, setExpandedReasoningId] = useState<string | null>(null);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const chatStateQuery = useQuery({
@@ -354,24 +355,49 @@ function ChatPage() {
         },
       });
 
-      setAllMessages((prev) => [
-        ...prev,
-        {
-          id: aiResponse.id || Math.random().toString(),
-          role: "ai",
-          text: aiResponse.content,
-          time: aiResponse.time,
-          createdAt: new Date().toISOString(),
-          conversationId: activeConversationId,
-          risk: aiResponse.risk,
-          reasoning: aiResponse.reasoning as ReasoningSnapshot | null,
-          actions: aiResponse.memoriesAdded?.length
-            ? [
-                `${aiResponse.memoriesAdded.length} memory fact${aiResponse.memoriesAdded.length === 1 ? "" : "s"} saved to profile`,
-              ]
-            : undefined,
-        },
-      ]);
+      const aiMessageId = aiResponse.id || Math.random().toString();
+      const aiMessage = {
+        id: aiMessageId,
+        role: "ai" as const,
+        text: "",
+        time: aiResponse.time,
+        createdAt: new Date().toISOString(),
+        conversationId: activeConversationId,
+        risk: aiResponse.risk,
+        reasoning: aiResponse.reasoning as ReasoningSnapshot | null,
+        actions: aiResponse.memoriesAdded?.length
+          ? [
+              `${aiResponse.memoriesAdded.length} memory fact${aiResponse.memoriesAdded.length === 1 ? "" : "s"} saved to profile`,
+            ]
+          : undefined,
+      };
+
+      setAllMessages((prev) => [...prev, aiMessage]);
+      setTypingMessageId(aiMessageId);
+
+      const words = String(aiResponse.content || "").split(/(\s+)/);
+      let rendered = "";
+      for (const word of words) {
+        rendered += word;
+        setAllMessages((prev) =>
+          prev.map((message) =>
+            message.id === aiMessageId ? { ...message, text: rendered } : message
+          )
+        );
+        await new Promise((resolve) => setTimeout(resolve, word.trim() ? 28 : 8));
+      }
+      setTypingMessageId(null);
+
+      setAllMessages((prev) =>
+        prev.map((message) =>
+          message.id === aiMessageId
+            ? {
+                ...message,
+                text: aiResponse.content,
+              }
+            : message
+        )
+      );
 
       const freshState = await getPatientChatState({ data: { patientId: patient.id } });
       queryClient.setQueryData(["patient-chat-state", patient.id], freshState);
@@ -393,6 +419,7 @@ function ChatPage() {
       }
     } catch (err) {
       console.error("Chat error:", err);
+      setTypingMessageId(null);
     } finally {
       setIsSending(false);
     }
@@ -691,6 +718,9 @@ function ChatPage() {
                       }`}
                     >
                       {m.text}
+                      {typingMessageId === m.id ? (
+                        <span className="ml-1 inline-block h-4 w-1 translate-y-0.5 animate-pulse rounded-full bg-primary align-baseline" />
+                      ) : null}
                     </div>
                     {m.actions?.length ? (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -716,7 +746,7 @@ function ChatPage() {
             </div>
           ))}
 
-          {isSending && (
+          {isSending && !typingMessageId && (
             <TypingIndicator />
           )}
 
@@ -800,12 +830,12 @@ function ChatPage() {
           className="border-t border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-4"
           onSubmit={handleSend}
         >
-          <div className="flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+          <div className="flex items-center gap-3 rounded-lg border border-input bg-black/35 px-3 py-2 shadow-[inset_0_1px_0_rgba(234,223,198,0.04)] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Describe a symptom, ask a question…"
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="flex-1 bg-transparent text-[15px] font-medium leading-6 text-foreground outline-none placeholder:text-muted-foreground"
               disabled={isSending || !patient}
             />
             <button
@@ -944,11 +974,8 @@ function ChatLoadingSkeleton() {
 function TypingIndicator() {
   return (
     <div className="w-full">
-      <div className="mb-1.5 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-        <Sparkles className="h-3 w-3 animate-pulse text-gold" /> Curable AI is typing
-      </div>
       <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-3 text-card-foreground">
-        <span className="sr-only">Curable AI is typing</span>
+        <span className="sr-only">Assistant is preparing a response</span>
         {[0, 1, 2].map((index) => (
           <span
             key={index}

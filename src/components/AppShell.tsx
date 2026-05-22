@@ -57,7 +57,7 @@ export function AppShell() {
         <div className="fixed right-5 top-5 z-20">
           <Link
             to="/auth"
-            className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-elegant transition-all hover:-translate-y-0.5 hover:bg-primary/90"
+            className="rounded-full border border-[#8fa99a]/30 bg-[#8fa99a] px-5 py-2.5 text-sm font-semibold text-[#07100d] shadow-elegant transition-all hover:-translate-y-0.5 hover:bg-[#a9bdaf]"
           >
             Sign in
           </Link>

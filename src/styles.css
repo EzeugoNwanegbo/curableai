@@ -7,8 +7,8 @@
 /* Curable - soft healthcare companion design system */
 
 @theme inline {
-  --font-serif: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
-  --font-sans: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+  --font-serif: "Aptos", "Inter", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-sans: "Aptos", "Inter", "Plus Jakarta Sans", system-ui, sans-serif;
   --font-mono: "Geist Mono", "IBM Plex Mono", ui-monospace, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -87,29 +87,29 @@
 }
 
 .dark {
-  --background: oklch(0.105 0.012 160);
-  --foreground: oklch(0.95 0.012 150);
-  --surface: oklch(0.145 0.016 160);
-  --surface-deep: oklch(0.08 0.014 160);
-  --card: oklch(0.17 0.017 160);
-  --card-foreground: oklch(0.95 0.012 150);
-  --popover: oklch(0.17 0.017 160);
-  --popover-foreground: oklch(0.95 0.012 150);
-  --primary: oklch(0.76 0.17 145);
-  --primary-foreground: oklch(0.09 0.014 160);
-  --secondary: oklch(0.22 0.024 160);
-  --secondary-foreground: oklch(0.93 0.012 150);
-  --muted: oklch(0.23 0.018 160);
-  --muted-foreground: oklch(0.72 0.018 150);
-  --accent: oklch(0.78 0.19 145);
-  --accent-foreground: oklch(0.08 0.014 160);
-  --gold: oklch(0.78 0.15 120);
-  --gold-foreground: oklch(0.1 0.014 160);
+  --background: oklch(0.105 0.01 205);
+  --foreground: oklch(0.91 0.025 82);
+  --surface: oklch(0.145 0.014 205);
+  --surface-deep: oklch(0.075 0.012 205);
+  --card: oklch(0.165 0.014 205);
+  --card-foreground: oklch(0.91 0.025 82);
+  --popover: oklch(0.165 0.014 205);
+  --popover-foreground: oklch(0.91 0.025 82);
+  --primary: oklch(0.78 0.047 156);
+  --primary-foreground: oklch(0.105 0.01 205);
+  --secondary: oklch(0.22 0.018 205);
+  --secondary-foreground: oklch(0.88 0.028 82);
+  --muted: oklch(0.235 0.014 205);
+  --muted-foreground: oklch(0.71 0.024 92);
+  --accent: oklch(0.78 0.058 156);
+  --accent-foreground: oklch(0.1 0.01 205);
+  --gold: oklch(0.76 0.075 78);
+  --gold-foreground: oklch(0.12 0.012 205);
   --destructive: oklch(0.64 0.15 25);
   --destructive-foreground: oklch(0.98 0.006 230);
-  --border: oklch(0.95 0.03 145 / 0.13);
-  --input: oklch(0.95 0.03 145 / 0.16);
-  --ring: oklch(0.78 0.19 145);
+  --border: oklch(0.82 0.04 156 / 0.16);
+  --input: oklch(0.82 0.04 156 / 0.2);
+  --ring: oklch(0.78 0.047 156);
 }
 
 @layer base {
