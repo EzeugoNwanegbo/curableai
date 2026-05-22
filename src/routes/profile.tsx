@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { Pin, ShieldAlert, Brain, Pencil, Trash2, Save, X } from "lucide-react";
 import { CurableLoader } from "@/components/CurableLoader";
@@ -48,24 +49,28 @@ function ProfilePage() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [editingMemory, setEditingMemory] = useState<string | null>(null);
   const [draftMemory, setDraftMemory] = useState({ label: "", details: "" });
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const profileQuery = useQuery({
+    queryKey: ["patient-profile", patientId],
+    enabled: Boolean(patientId),
+    queryFn: () => getPatientProfileState({ data: { patientId: patientId! } }),
+  });
 
   useEffect(() => {
-    async function fetchData() {
-      if (!patientId) {
-        setIsLoading(false);
-        return;
-      }
-      try {
-        setIsLoading(true);
+    if (!patientId) return;
+    if (profileQuery.error) {
+      console.error("Profile fetch error:", profileQuery.error);
+      setError(profileQuery.error.message || "Failed to load profile data");
+      return;
+    }
+    if (!profileQuery.data) return;
 
-        const { patient: pDetails, memories: mems } = await getPatientProfileState({ data: { patientId } });
-
-        let profileData: Patient;
-
-        if (pDetails) {
-          profileData = {
+    const { patient: pDetails, memories: mems } = profileQuery.data;
+    setPatient(
+      pDetails
+        ? {
             name: pDetails.full_name,
             age: pDetails.age,
             sex: pDetails.sex,
@@ -73,9 +78,8 @@ function ProfilePage() {
             allergies: pDetails.allergies || [],
             conditions: pDetails.conditions || [],
             pinnedByDoctor: pDetails.pinned_by_doctor || "None",
-          };
-        } else {
-          profileData = {
+          }
+        : {
             name: displayName,
             age: 0,
             sex: "",
@@ -83,30 +87,18 @@ function ProfilePage() {
             allergies: [],
             conditions: [],
             pinnedByDoctor: "None",
-          };
-        }
-        setPatient(profileData);
-
-        if (mems) {
-          setMemories(
-            mems.map((m) => ({
-              id: m.id,
-              label: m.label,
-              layer: m.layer,
-              details: m.details,
-              since: new Date(m.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-            }))
-          );
-        }
-      } catch (err: any) {
-        console.error("Profile fetch error:", err);
-        setError(err.message || "Failed to load profile data");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchData();
-  }, [displayName, patientId]);
+          }
+    );
+    setMemories(
+      (mems || []).map((m) => ({
+        id: m.id,
+        label: m.label,
+        layer: m.layer,
+        details: m.details,
+        since: new Date(m.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+      }))
+    );
+  }, [displayName, patientId, profileQuery.data, profileQuery.error]);
 
   const startEdit = (memory: Memory) => {
     setEditingMemory(memory.id);
@@ -135,6 +127,7 @@ function ProfilePage() {
     setMemories((prev) =>
       prev.map((m) => (m.id === id ? { ...m, label: draftMemory.label, details: draftMemory.details } : m))
     );
+    queryClient.invalidateQueries({ queryKey: ["patient-profile", patientId] });
     cancelEdit();
   };
 
@@ -147,9 +140,10 @@ function ProfilePage() {
     }
 
     setMemories((prev) => prev.filter((m) => m.id !== id));
+    queryClient.invalidateQueries({ queryKey: ["patient-profile", patientId] });
   };
 
-  if (isLoading) {
+  if (!patientId || profileQuery.isLoading) {
     return <CurableLoader message="Loading medical profile..." />;
   }
 

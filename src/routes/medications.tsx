@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Pill, Plus, Hospital, User2, AlertCircle, Loader2, X } from "lucide-react";
 import { addPatientMedication, getAuthenticatedPatientMedications } from "@/api/medications";
@@ -30,28 +31,26 @@ interface Medication {
 function MedsPage() {
   const { patientId } = useAuth();
   const [medications, setMedications] = useState<Medication[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const medicationsQuery = useQuery({
+    queryKey: ["patient-medications", patientId],
+    enabled: Boolean(patientId),
+    queryFn: () => getAuthenticatedPatientMedications({ data: { patientId: patientId! } }),
+  });
 
   useEffect(() => {
-    async function loadMedications() {
-      if (!patientId) {
-        setIsLoading(false);
-        return;
-      }
-      try {
-        const meds = await getAuthenticatedPatientMedications({ data: { patientId } });
-        setMedications(meds as Medication[]);
-      } catch (err: any) {
-        setError(err.message || "Could not load medications.");
-      } finally {
-        setIsLoading(false);
-      }
+    if (medicationsQuery.error) {
+      setError(medicationsQuery.error.message || "Could not load medications.");
+      return;
     }
-    loadMedications();
-  }, [patientId]);
+    if (medicationsQuery.data) {
+      setMedications(medicationsQuery.data as Medication[]);
+    }
+  }, [medicationsQuery.data, medicationsQuery.error]);
 
   const handleAddMedication = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -102,6 +101,10 @@ function MedsPage() {
         },
       });
       setMedications((prev) => [...prev, med as Medication]);
+      queryClient.setQueryData(["patient-medications", patientId], (prev: Medication[] | undefined) => [
+        ...(prev || []),
+        med as Medication,
+      ]);
       setIsFormOpen(false);
       formElement.reset();
     } catch (err: any) {
@@ -267,7 +270,7 @@ function MedsPage() {
       ) : null}
 
       <div className="mt-10 grid gap-5 md:grid-cols-2">
-        {isLoading ? (
+        {medicationsQuery.isLoading ? (
           <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground md:col-span-2">
             <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-primary" />
             Loading medications...

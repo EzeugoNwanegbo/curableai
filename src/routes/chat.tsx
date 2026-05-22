@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Send,
@@ -171,6 +172,7 @@ function mapDbMessage(m: any): Message {
 
 function ChatPage() {
   const { patientId, displayName } = useAuth();
+  const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("current");
@@ -190,6 +192,12 @@ function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedReasoningId, setExpandedReasoningId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const chatStateQuery = useQuery({
+    queryKey: ["patient-chat-state", patientId],
+    enabled: Boolean(patientId),
+    queryFn: () => getPatientChatState({ data: { patientId: patientId! } }),
+  });
 
   const messages = useMemo(
     () => allMessages.filter((message) => message.conversationId === activeConversationId),
@@ -230,62 +238,51 @@ function ChatPage() {
     [messages],
   );
 
-  // 1. Initialize Patient & Fetch Data
   useEffect(() => {
-    async function init() {
-      if (!patientId) return;
-      try {
-        console.log("Initializing chat...");
-        console.log("Patient initialized:", patientId);
+    if (!patientId) return;
+    if (chatStateQuery.error) {
+      console.error("Initialization error:", chatStateQuery.error);
+      setError(chatStateQuery.error.message || "An unexpected error occurred.");
+      return;
+    }
+    if (!chatStateQuery.data) return;
 
-        const state = await getPatientChatState({ data: { patientId } });
-        const pDetails = state.patient;
-
-        if (pDetails) {
-          setPatient({
+    const state = chatStateQuery.data;
+    const pDetails = state.patient;
+    setPatient(
+      pDetails
+        ? {
             id: patientId,
             name: pDetails.full_name,
             pinned: pDetails.pinned_by_doctor,
-          });
-        } else {
-          setPatient({
+          }
+        : {
             id: patientId,
             name: displayName,
             pinned: "",
-          });
-        }
+          }
+    );
 
-        if (state.messages) {
-          const mappedMessages = state.messages.map(mapDbMessage);
-          setAllMessages(mappedMessages);
-          setActiveConversationId(
-            mappedMessages[mappedMessages.length - 1]?.conversationId || "current",
-          );
-        }
-
-        setDoctorConnection(state.doctorConnection || null);
-
-        if (state.memories) {
-          setMemories(
-            state.memories.map((m) => ({
-              id: m.id,
-              label: m.label,
-              layer: m.layer,
-              details: m.details,
-              since: new Date(m.created_at).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              }),
-            })),
-          );
-        }
-      } catch (err: any) {
-        console.error("Initialization error:", err);
-        setError(err.message || "An unexpected error occurred.");
-      }
+    if (state.messages) {
+      const mappedMessages = state.messages.map(mapDbMessage);
+      setAllMessages(mappedMessages);
+      setActiveConversationId(mappedMessages[mappedMessages.length - 1]?.conversationId || "current");
     }
-    init();
-  }, [displayName, patientId]);
+
+    setDoctorConnection(state.doctorConnection || null);
+    setMemories(
+      (state.memories || []).map((m) => ({
+        id: m.id,
+        label: m.label,
+        layer: m.layer,
+        details: m.details,
+        since: new Date(m.created_at).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        }),
+      }))
+    );
+  }, [chatStateQuery.data, chatStateQuery.error, displayName, patientId]);
 
   useEffect(() => {
     if (!patient?.id) return;
@@ -378,6 +375,7 @@ function ChatPage() {
       ]);
 
       const freshState = await getPatientChatState({ data: { patientId: patient.id } });
+      queryClient.setQueryData(["patient-chat-state", patient.id], freshState);
       setDoctorConnection(freshState.doctorConnection || null);
 
       if (freshState.memories) {
