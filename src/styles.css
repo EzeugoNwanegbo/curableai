@@ -160,80 +160,79 @@
 @layer components {
   .curable-loader {
     position: relative;
-    display: grid;
-    height: 7.5rem;
-    width: 7.5rem;
-    grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: repeat(5, 1fr);
-    gap: 0.42rem;
-    border-radius: 1.25rem;
+    display: flex;
+    height: 6.75rem;
+    width: 6.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1.15rem;
     background:
-      linear-gradient(145deg, oklch(0.99 0.006 220 / 0.09), oklch(0.78 0.19 145 / 0.04)),
+      radial-gradient(circle at 50% 48%, oklch(0.78 0.19 145 / 0.16), transparent 54%),
+      linear-gradient(145deg, oklch(0.99 0.006 220 / 0.08), oklch(0.78 0.19 145 / 0.035)),
       oklch(0.17 0.017 160 / 0.9);
     box-shadow:
       inset 0 0 0 1px oklch(0.95 0.03 145 / 0.12),
-      0 24px 60px -32px oklch(0.78 0.19 145 / 0.65);
+      0 22px 54px -34px oklch(0.78 0.19 145 / 0.7);
     overflow: hidden;
-    padding: 1.05rem;
   }
 
-  .curable-loader__glow {
+  .curable-loader::after {
     position: absolute;
-    inset: -34%;
-    background:
-      conic-gradient(
-        from 120deg,
-        transparent 0 18%,
-        oklch(0.78 0.19 145 / 0.28) 26%,
-        oklch(0.76 0.17 215 / 0.18) 38%,
-        transparent 54% 100%
-      );
-    animation: curable-loader-spin 2.8s linear infinite;
+    inset: 0.65rem;
+    border-radius: 0.85rem;
+    border: 1px solid oklch(0.95 0.03 145 / 0.08);
+    content: "";
   }
 
-  .curable-loader__tile {
+  .curable-loader__mark {
     z-index: 1;
-    grid-column: calc(var(--tile-x) + 1);
-    grid-row: calc(var(--tile-y) + 1);
-    border-radius: 0.4rem;
-    background: linear-gradient(135deg, oklch(0.83 0.18 145), var(--color-accent));
-    box-shadow:
-      0 0 0 1px oklch(0.99 0.004 220 / 0.18),
-      0 0 24px oklch(0.78 0.19 145 / 0.32);
-    animation: curable-loader-form 1.75s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-    animation-delay: calc(var(--tile-delay) * 80ms);
-    opacity: 0.95;
-    transform-origin: center;
+    height: 4.8rem;
+    width: 4.8rem;
+    overflow: visible;
   }
 
-  @keyframes curable-loader-form {
+  .curable-loader__track,
+  .curable-loader__stroke {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 12;
+  }
+
+  .curable-loader__track {
+    stroke: oklch(0.95 0.03 145 / 0.12);
+  }
+
+  .curable-loader__stroke {
+    stroke: oklch(0.78 0.19 145);
+    stroke-dasharray: 164;
+    stroke-dashoffset: 164;
+    filter: drop-shadow(0 0 13px oklch(0.78 0.19 145 / 0.42));
+    animation: curable-loader-draw 1.85s ease-in-out infinite;
+  }
+
+  @keyframes curable-loader-draw {
     0% {
-      opacity: 0;
-      transform: translate(1.8rem, -1.8rem) scale(0.25) rotate(45deg);
+      stroke-dashoffset: 164;
+      opacity: 0.35;
     }
 
-    34%,
-    68% {
+    42%,
+    72% {
+      stroke-dashoffset: 0;
       opacity: 1;
-      transform: translate(0, 0) scale(1) rotate(0deg);
     }
 
     100% {
-      opacity: 0.35;
-      transform: translate(-0.35rem, 0.35rem) scale(0.72) rotate(-12deg);
-    }
-  }
-
-  @keyframes curable-loader-spin {
-    to {
-      transform: rotate(360deg);
+      stroke-dashoffset: -164;
+      opacity: 0.45;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .curable-loader__glow,
-    .curable-loader__tile {
+    .curable-loader__stroke {
       animation: none;
+      stroke-dashoffset: 0;
     }
   }
 }
