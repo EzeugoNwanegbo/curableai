@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { ensurePatientAccount } from "@/api/auth";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 export type UserRole = "patient" | "doctor";
 
@@ -33,47 +34,8 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const AUTH_CACHE_KEY = "curable:last-account";
-
-interface CachedAccount {
-  role: UserRole;
-  patientId: string | null;
-  displayName: string;
-}
-
-function readCachedAccount(): CachedAccount | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(AUTH_CACHE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<CachedAccount>;
-    if (parsed.role !== "patient" && parsed.role !== "doctor") return null;
-
-    return {
-      role: parsed.role,
-      patientId: typeof parsed.patientId === "string" ? parsed.patientId : null,
-      displayName: parsed.displayName || "Curable user",
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedAccount(account: CachedAccount | null) {
-  if (typeof window === "undefined") return;
-
-  if (!account) {
-    window.localStorage.removeItem(AUTH_CACHE_KEY);
-    return;
-  }
-
-  window.localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(account));
-}
-
 export function getUserRole(user: User | null): UserRole {
-  return user?.user_metadata?.role === "doctor" ? "doctor" : "patient";
+  return user?.app_metadata?.role === "doctor" ? "doctor" : "patient";
 }
 
 export function getUserDisplayName(user: User | null) {
@@ -86,32 +48,26 @@ export function getUserDisplayName(user: User | null) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [cachedAccount, setCachedAccount] = useState<CachedAccount | null>(() =>
-    readCachedAccount(),
-  );
   const [session, setSession] = useState<Session | null>(null);
-  const [patientId, setPatientId] = useState<string | null>(cachedAccount?.patientId ?? null);
+  const [patientId, setPatientId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-
+  const revision = useRef(0);
+  const queryClient = useQueryClient();
+  const accountId = useRef<string | null>(null);
   const user = session?.user || null;
-  const role = user ? getUserRole(user) : (cachedAccount?.role ?? null);
-  const displayName = user
-    ? getUserDisplayName(user)
-    : (cachedAccount?.displayName ?? "Curable user");
+  const role = user ? getUserRole(user) : null;
+  const displayName = getUserDisplayName(user);
 
-  const ensurePatient = async (currentSession: Session, profile?: RefreshPatientInput) => {
+  const ensurePatient = async (
+    currentSession: Session,
+    profile?: RefreshPatientInput,
+    expectedRevision = revision.current,
+  ) => {
     const currentRole = getUserRole(currentSession.user);
 
     if (currentRole !== "patient") {
       setPatientId(null);
-      const account = {
-        role: currentRole,
-        patientId: null,
-        displayName: getUserDisplayName(currentSession.user),
-      };
-      setCachedAccount(account);
-      writeCachedAccount(account);
       return;
     }
 
@@ -133,55 +89,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     });
 
-    setPatientId(patient.id);
-    const account = {
-      role: currentRole,
-      patientId: patient.id,
-      displayName: getUserDisplayName(currentSession.user),
-    };
-    setCachedAccount(account);
-    writeCachedAccount(account);
-  };
-
-  const applySession = async (nextSession: Session | null) => {
-    setIsLoading(true);
-    setAuthError(null);
-    setSession(nextSession);
-
-    try {
-      if (nextSession) {
-        await ensurePatient(nextSession);
-      } else {
-        setPatientId(null);
-        setCachedAccount(null);
-        writeCachedAccount(null);
-      }
-    } catch (err: any) {
-      setPatientId(null);
-      setAuthError(err.message || "Could not prepare this account.");
-    } finally {
-      setIsLoading(false);
-    }
+    if (expectedRevision === revision.current) setPatientId(patient.id);
   };
 
   useEffect(() => {
     let active = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (active) void applySession(data.session);
-    });
-
+    const applySession = async (nextSession: Session | null) => {
+      const current = ++revision.current;
+      if (accountId.current !== (nextSession?.user.id ?? null)) {
+        queryClient.clear();
+        accountId.current = nextSession?.user.id ?? null;
+      }
+      setIsLoading(true);
+      setSession(null);
+      setPatientId(null);
+      setAuthError(null);
+      try {
+        if (nextSession) {
+          const { data, error } = await supabase.auth.getUser(nextSession.access_token);
+          if (error || !data.user)
+            throw new Error("Your session has expired. Please sign in again.");
+          if (!active || current !== revision.current) return;
+          const verifiedSession = { ...nextSession, user: data.user };
+          setSession(verifiedSession);
+          if (data.user.user_metadata?.role === "doctor" && getUserRole(data.user) !== "doctor") {
+            throw new Error(
+              "Your doctor account is awaiting approval. Contact the Curable administrator.",
+            );
+          }
+          await ensurePatient(verifiedSession, undefined, current);
+        }
+      } catch (error) {
+        if (active && current === revision.current) {
+          setAuthError(error instanceof Error ? error.message : "Could not prepare this account.");
+        }
+      } finally {
+        if (active && current === revision.current) setIsLoading(false);
+      }
+    };
+    if (!isSupabaseConfigured) {
+      setAuthError("Supabase is not configured. Add the project URL and publishable key.");
+      setIsLoading(false);
+      return;
+    }
+    // Defer Supabase calls until the auth event releases its internal lock.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (active) void applySession(nextSession);
+      queueMicrotask(() => {
+        if (active) void applySession(nextSession);
+      });
     });
-
     return () => {
       active = false;
+      // This counter invalidates pending requests; it is not a DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      revision.current++;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -198,11 +164,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await ensurePatient(session, profile);
       },
       signOut: async () => {
-        await supabase.auth.signOut();
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          setAuthError(error.message);
+          return;
+        }
+        revision.current++;
         setSession(null);
         setPatientId(null);
-        setCachedAccount(null);
-        writeCachedAccount(null);
       },
     }),
     [authError, displayName, isLoading, patientId, role, session, user],

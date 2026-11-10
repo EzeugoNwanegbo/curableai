@@ -37,3 +37,6 @@ dist-ssr
 
 # Local test artifacts
 curable-*.png
+
+# Vercel local project and build metadata
+.vercel/

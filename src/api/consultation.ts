@@ -64,290 +64,234 @@ async function insertDoctorReviewCard({
   }
 }
 
-export const validateReviewGuidance = createServerFn({
-  method: "POST",
-  validator: z.object({
-    reviewId: z.string(),
-    doctorNote: z.string().optional(),
-  }),
-}).handler(async ({ data: { reviewId, doctorNote } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
+export const validateReviewGuidance = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      reviewId: z.string(),
+      doctorNote: z.string().optional(),
+    }),
+  )
+  .handler(async ({ data: { reviewId, doctorNote } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
+    const {
+      data: { user },
+    } = await client.auth.getUser();
+    if (user?.app_metadata?.role !== "doctor") {
+      throw new Error("Only an approved doctor can review patient guidance.");
+    }
 
-  const { data: review, error: reviewError } = await client
-    .from("review_queue")
-    .select("id, patient_id, summary")
-    .eq("id", reviewId)
-    .single();
-
-  if (reviewError) throw reviewError;
-  const doctorConnection = await readDoctorConnection(client, review.patient_id);
-  const doctorName = doctorConnection?.doctorName || "Doctor";
-
-  const note =
-    doctorNote?.trim() ||
-    "I reviewed the report and agree that Curable handled this safely. Continue following the guidance already given, and seek urgent care if symptoms become severe or worrying.";
-
-  await insertDoctorReviewCard({
-    client,
-    patientId: review.patient_id,
-    reviewId: review.id,
-    outcome: "validated",
-    title: "Doctor validated Curable guidance",
-    content: `${doctorName} reviewed your report and agreed with Curable's guidance. ${note}`,
-    doctorNote: note,
-    doctorName,
-  });
-
-  const { error: updateError } = await client
-    .from("review_queue")
-    .update({ status: "reviewed" })
-    .eq("id", review.id);
-
-  if (updateError) {
-    console.warn("Review queue status did not accept reviewed; validation card was still created.");
-  }
-
-  await updateDoctorReportStatus(client, review.id, "validated");
-
-  return {
-    reviewId: review.id,
-    patientId: review.patient_id,
-    status: "validated",
-  };
-});
-
-export const startConsultation = createServerFn({
-  method: "POST",
-  validator: z.object({
-    reviewId: z.string(),
-    doctorNote: z.string().optional(),
-  }),
-}).handler(async ({ data: { reviewId, doctorNote } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
-
-  const { data: review, error: reviewError } = await client
-    .from("review_queue")
-    .select("id, patient_id, summary")
-    .eq("id", reviewId)
-    .single();
-
-  if (reviewError) throw reviewError;
-  const doctorConnection = await readDoctorConnection(client, review.patient_id);
-  const doctorName = doctorConnection?.doctorName || "Doctor";
-
-  const note =
-    doctorNote?.trim() ||
-    "I reviewed the report and want to speak with you directly before giving final guidance.";
-
-  let consultationId = review.id;
-  try {
-    const { data: report } = await client
-      .from("doctor_reports")
-      .select("id")
-      .eq("review_id", review.id)
-      .maybeSingle();
-
-    const { data: consultation } = await client
-      .from("consultations")
-      .insert({
-        review_id: review.id,
-        report_id: report?.id || null,
-        patient_id: review.patient_id,
-        doctor_name: doctorName,
-        status: "active",
-      })
-      .select("id")
+    const { data: review, error: reviewError } = await client
+      .from("review_queue")
+      .select("id, patient_id, summary")
+      .eq("id", reviewId)
       .single();
 
-    if (consultation?.id) {
-      consultationId = consultation.id;
-      await client.from("consultation_messages").insert({
-        consultation_id: consultation.id,
-        patient_id: review.patient_id,
-        role: "doctor",
-        content: `Hello, I have received your report. ${note}`,
-      });
+    if (reviewError) throw reviewError;
+    const doctorConnection = await readDoctorConnection(client, review.patient_id);
+    const doctorName = doctorConnection?.doctorName || "Doctor";
 
-      const { error: statusError } = await client
-        .from("review_queue")
-        .update({ status: "consultation_started" })
-        .eq("id", review.id);
+    const note =
+      doctorNote?.trim() ||
+      "I reviewed the report and agree that Curable handled this safely. Continue following the guidance already given, and seek urgent care if symptoms become severe or worrying.";
 
-      if (statusError) {
-        console.warn("Review queue status did not accept consultation_started; consultation record was still created.");
-      }
-    }
-  } catch (err) {
-    console.warn("Consultation table insert failed. Run supabase-curable-schema.sql to enable persisted consultations.", err);
+    await insertDoctorReviewCard({
+      client,
+      patientId: review.patient_id,
+      reviewId: review.id,
+      outcome: "validated",
+      title: "Doctor validated Curable guidance",
+      content: `${doctorName} reviewed your report and agreed with Curable's guidance. ${note}`,
+      doctorNote: note,
+      doctorName,
+    });
 
-    const { error: fallbackError } = await client
+    const { error: updateError } = await client
       .from("review_queue")
-      .update({ status: "consultation_started" })
+      .update({ status: "reviewed" })
       .eq("id", review.id);
 
-    if (fallbackError) {
-      throw new Error(
-        "Could not start a consultation because the Supabase consultation tables are not installed yet. Run supabase-curable-schema.sql in Supabase SQL Editor, then try again."
+    if (updateError) {
+      console.warn(
+        "Review queue status did not accept reviewed; validation card was still created.",
       );
     }
-  }
 
-  await insertDoctorReviewCard({
-    client,
-    patientId: review.patient_id,
-    reviewId: review.id,
-    outcome: "consultation_started",
-    title: "Doctor wants to speak with you",
-    content: `${doctorName} reviewed your report and wants to continue this in a doctor consultation. ${note}`,
-    doctorNote: note,
-    consultationId,
-    doctorName,
-  });
-
-  await updateDoctorReportStatus(client, review.id, "consultation_started");
-
-  return {
-    id: consultationId,
-    patientId: review.patient_id,
-  };
-});
-
-export const getActiveConsultation = createServerFn({
-  method: "GET",
-  validator: z.object({
-    patientId: z.string().uuid().optional(),
-  }),
-}).handler(async ({ data: { patientId } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
-
-  let consultationQuery = client
-    .from("consultations")
-    .select("*, patients(full_name), doctor_reports(*)")
-    .eq("status", "active")
-    .order("started_at", { ascending: false })
-    .limit(1);
-
-  if (patientId) {
-    consultationQuery = consultationQuery.eq("patient_id", patientId);
-  }
-
-  const { data: consultation, error: consultationError } = await consultationQuery.maybeSingle();
-
-  if (!consultationError && consultation) {
-    const report = Array.isArray(consultation.doctor_reports)
-      ? consultation.doctor_reports[0]
-      : consultation.doctor_reports;
+    await updateDoctorReportStatus(client, review.id, "validated");
 
     return {
-      id: consultation.id,
-      patientId: consultation.patient_id,
-      patientName: consultation.patients?.full_name || "Patient",
-      doctorName: consultation.doctor_name || (await readDoctorConnection(client, consultation.patient_id))?.doctorName || "Doctor",
-      summary: report?.summary || "Doctor consultation started.",
-      risk: report?.risk_level || "moderate",
-      reportDetails: [
-        report?.doctor_question ? `Doctor question: ${report.doctor_question}` : "",
-        report?.ai_safety_note ? `AI safety note: ${report.ai_safety_note}` : "",
-        ...(report?.patient_context || []).map((item: string) => `Patient: ${item}`),
-        ...(report?.medication_context || []).map((item: string) => `Medication: ${item}`),
-        ...(report?.memory_context || []).map((item: string) => `Memory: ${item}`),
-        ...(report?.recent_conversation || []).map((item: string) => `Recent chat: ${item}`),
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      createdAt: consultation.started_at,
+      reviewId: review.id,
+      patientId: review.patient_id,
+      status: "validated",
     };
-  }
+  });
 
-  let reviewQuery = client
-    .from("review_queue")
-    .select("*, patients(full_name)")
-    .eq("status", "consultation_started")
-    .order("created_at", { ascending: false })
-    .limit(1);
+export const startConsultation = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      reviewId: z.string(),
+      doctorNote: z.string().optional(),
+    }),
+  )
+  .handler(async ({ data: { reviewId, doctorNote } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
+    const { data: id, error } = await client.rpc("accept_student_review", {
+      review_id_input: reviewId,
+      doctor_note: doctorNote || "",
+    });
+    if (error) throw new Error(error.message);
+    return { id: String(id) };
+  });
 
-  if (patientId) {
-    reviewQuery = reviewQuery.eq("patient_id", patientId);
-  }
+export const getActiveConsultation = createServerFn({ method: "GET" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid().optional(),
+      consultationId: z.string().uuid().optional(),
+    }),
+  )
+  .handler(async ({ data: { patientId, consultationId } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
 
-  const { data, error } = await reviewQuery.maybeSingle();
+    let consultationQuery = client
+      .from("consultations")
+      .select("*, patients(full_name), doctor_reports(*)")
+      .eq("status", "active")
+      .order("started_at", { ascending: false })
+      .limit(1);
 
-  if (error) throw error;
+    if (consultationId) consultationQuery = consultationQuery.eq("id", consultationId);
+    if (patientId) {
+      consultationQuery = consultationQuery.eq("patient_id", patientId);
+    }
 
-  return data
-    ? {
-        id: data.id,
-        patientId: data.patient_id,
-        patientName: data.patients?.full_name || "Patient",
-        doctorName: (await readDoctorConnection(client, data.patient_id))?.doctorName || "Doctor",
-        summary: data.summary,
-        risk: data.risk_level,
-        reportDetails: data.ai_recommendation,
-        createdAt: data.created_at,
-      }
-    : null;
-});
+    const { data: consultation, error: consultationError } = await consultationQuery.maybeSingle();
 
-export const getConsultationMessages = createServerFn({
-  method: "GET",
-  validator: z.object({
-    consultationId: z.string(),
-  }),
-}).handler(async ({ data: { consultationId } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
+    if (!consultationError && consultation) {
+      const report = Array.isArray(consultation.doctor_reports)
+        ? consultation.doctor_reports[0]
+        : consultation.doctor_reports;
 
-  const { data, error } = await client
-    .from("consultation_messages")
-    .select("*")
-    .eq("consultation_id", consultationId)
-    .order("created_at", { ascending: true });
+      const [
+        { data: historyPatient, error: historyError },
+        { data: historyMemory, error: memoryError },
+        { data: historyMedicines, error: medicineError },
+      ] = await Promise.all([
+        client
+          .from("patients")
+          .select("full_name,age,sex,blood_group,allergies,conditions")
+          .eq("id", consultation.patient_id)
+          .single(),
+        client
+          .from("memory_snapshots")
+          .select("label,details")
+          .eq("patient_id", consultation.patient_id)
+          .order("created_at"),
+        client
+          .from("medications")
+          .select("name,dosage,frequency")
+          .eq("patient_id", consultation.patient_id),
+      ]);
+      if (historyError || memoryError || medicineError)
+        throw new Error("Could not load the available patient history.");
+      const historyDetails = [
+        "AVAILABLE PATIENT HISTORY",
+        JSON.stringify(historyPatient),
+        ...(historyMemory || []).map((m) => `${m.label}: ${m.details}`),
+        ...(historyMedicines || []).map((m) => `Medicine: ${m.name} ${m.dosage} ${m.frequency}`),
+      ].join("\n");
+      return {
+        id: consultation.id,
+        patientId: consultation.patient_id,
+        patientName: consultation.patients?.full_name || "Patient",
+        doctorName:
+          consultation.doctor_name ||
+          (await readDoctorConnection(client, consultation.patient_id))?.doctorName ||
+          "Doctor",
+        summary: report?.summary || "Doctor consultation started.",
+        risk: report?.risk_level || "moderate",
+        reportDetails: [
+          historyDetails,
+          report?.doctor_question ? `Doctor question: ${report.doctor_question}` : "",
+          report?.ai_safety_note ? `AI safety note: ${report.ai_safety_note}` : "",
+          ...(report?.patient_context || []).map((item: string) => `Patient: ${item}`),
+          ...(report?.medication_context || []).map((item: string) => `Medication: ${item}`),
+          ...(report?.memory_context || []).map((item: string) => `Memory: ${item}`),
+          ...(report?.recent_conversation || []).map((item: string) => `Recent chat: ${item}`),
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        createdAt: consultation.started_at,
+      };
+    }
 
-  if (error) {
-    console.warn("Consultation messages fetch failed:", error.message);
-    return [];
-  }
+    if (consultationError) throw consultationError;
+    return null;
+  });
 
-  return (data || []).map((m) => ({
-    id: m.id,
-    role: m.role,
-    text: m.content,
-    time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-  }));
-});
+export const getConsultationMessages = createServerFn({ method: "GET" })
+  .inputValidator(
+    z.object({
+      consultationId: z.string(),
+    }),
+  )
+  .handler(async ({ data: { consultationId } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
 
-export const sendConsultationMessage = createServerFn({
-  method: "POST",
-  validator: z.object({
-    consultationId: z.string(),
-    patientId: z.string().uuid(),
-    role: z.enum(["doctor", "patient"]),
-    content: z.string().min(1),
-  }),
-}).handler(async ({ data: { consultationId, patientId, role, content } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
+    const { data, error } = await client
+      .from("consultation_messages")
+      .select("*")
+      .eq("consultation_id", consultationId)
+      .order("created_at", { ascending: true });
 
-  const { data, error } = await client
-    .from("consultation_messages")
-    .insert({
-      consultation_id: consultationId,
-      patient_id: patientId,
-      role,
-      content,
-    })
-    .select("*")
-    .single();
+    if (error) {
+      throw error;
+    }
 
-  if (error) throw error;
+    return (data || []).map((m) => ({
+      id: m.id,
+      role: m.role,
+      text: m.content,
+      time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    }));
+  });
 
-  return {
-    id: data.id,
-    role: data.role,
-    text: data.content,
-    time: new Date(data.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-  };
-});
+export const sendConsultationMessage = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      consultationId: z.string(),
+      patientId: z.string().uuid(),
+      role: z.enum(["doctor", "patient"]),
+      content: z.string().min(1),
+    }),
+  )
+  .handler(async ({ data: { consultationId, patientId, role, content } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
+
+    const { data, error } = await client
+      .from("consultation_messages")
+      .insert({
+        consultation_id: consultationId,
+        patient_id: patientId,
+        role,
+        content,
+      })
+      .select("*")
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      role: data.role,
+      text: data.content,
+      time: new Date(data.created_at).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+  });

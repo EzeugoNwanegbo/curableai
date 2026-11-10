@@ -1,16 +1,24 @@
+import { loadSampleClinicRecord } from "@/api/records";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { Pin, ShieldAlert, Brain, Pencil, Trash2, Save, X } from "lucide-react";
 import { CurableLoader } from "@/components/CurableLoader";
-import { deletePatientMemoryFact, getPatientProfileState, updatePatientMemoryFact } from "@/api/auth";
+import {
+  deletePatientMemoryFact,
+  getPatientProfileState,
+  updatePatientMemoryFact,
+} from "@/api/auth";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
     meta: [
       { title: "Health Profile · Curable" },
-      { name: "description", content: "Persistent long-term medical identity feeding context into every AI response." },
+      {
+        name: "description",
+        content: "Persistent long-term medical identity feeding context into every AI response.",
+      },
     ],
   }),
   component: ProfilePage,
@@ -49,6 +57,8 @@ function ProfilePage() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [editingMemory, setEditingMemory] = useState<string | null>(null);
   const [draftMemory, setDraftMemory] = useState({ label: "", details: "" });
+  const [loadingSample, setLoadingSample] = useState(false);
+  const [sampleNotice, setSampleNotice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -87,7 +97,7 @@ function ProfilePage() {
             allergies: [],
             conditions: [],
             pinnedByDoctor: "None",
-          }
+          },
     );
     setMemories(
       (mems || []).map((m) => ({
@@ -95,8 +105,12 @@ function ProfilePage() {
         label: m.label,
         layer: m.layer,
         details: m.details,
-        since: new Date(m.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-      }))
+        since: new Date(m.created_at).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+      })),
     );
   }, [displayName, patientId, profileQuery.data, profileQuery.error]);
 
@@ -125,7 +139,9 @@ function ProfilePage() {
     }
 
     setMemories((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, label: draftMemory.label, details: draftMemory.details } : m))
+      prev.map((m) =>
+        m.id === id ? { ...m, label: draftMemory.label, details: draftMemory.details } : m,
+      ),
     );
     queryClient.invalidateQueries({ queryKey: ["patient-profile", patientId] });
     cancelEdit();
@@ -153,7 +169,7 @@ function ProfilePage() {
         <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
         <h2 className="font-serif text-2xl text-foreground mb-2">Profile Error</h2>
         <p className="text-muted-foreground max-w-md mb-6">{error || "Patient not found."}</p>
-        <button 
+        <button
           onClick={() => window.location.reload()}
           className="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-accent"
         >
@@ -163,8 +179,10 @@ function ProfilePage() {
     );
   }
 
-  const genotype = memories.find((memory) => memory.label.toLowerCase() === "genotype")?.details || "";
-  const occupation = memories.find((memory) => memory.label.toLowerCase() === "occupation")?.details || "";
+  const genotype =
+    memories.find((memory) => memory.label.toLowerCase() === "genotype")?.details || "";
+  const occupation =
+    memories.find((memory) => memory.label.toLowerCase() === "occupation")?.details || "";
 
   return (
     <div className="container-page py-10">
@@ -174,6 +192,39 @@ function ProfilePage() {
         The persistent medical identity. Every AI response retrieves from here before responding.
       </p>
 
+      <section className="mt-8 rounded-xl border border-primary/20 bg-primary/5 p-6">
+        <h2 className="text-lg">Preview a clinic connection</h2>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          For investor demonstrations, add a clearly labelled fictional record with allergies,
+          medicines, a clinic visit and a test result. Your actual profile stays separate. No
+          university EMR is connected.
+        </p>
+        <button
+          className="mt-4 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          disabled={loadingSample}
+          onClick={async () => {
+            setLoadingSample(true);
+            setSampleNotice("");
+            try {
+              const result = await loadSampleClinicRecord({ data: { confirmed: true } });
+              setSampleNotice(result.notice);
+              await queryClient.invalidateQueries({ queryKey: ["patient-profile", patientId] });
+              await queryClient.invalidateQueries({ queryKey: ["patient-chat-state", patientId] });
+            } catch (e) {
+              setSampleNotice(e instanceof Error ? e.message : "Could not load sample records.");
+            } finally {
+              setLoadingSample(false);
+            }
+          }}
+        >
+          {loadingSample ? "Adding sample record…" : "Add fictional clinic record"}
+        </button>
+        {sampleNotice && (
+          <p role="status" className="mt-3 text-sm">
+            {sampleNotice}
+          </p>
+        )}
+      </section>
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
         <Section title="Basic profile">
           <dl className="space-y-3 text-sm">
@@ -208,7 +259,10 @@ function ProfilePage() {
           <ul className="space-y-2 text-sm">
             {patient.conditions.length > 0 ? (
               patient.conditions.map((c) => (
-                <li key={c} className="rounded border border-border bg-surface px-3 py-2 text-foreground">
+                <li
+                  key={c}
+                  className="rounded border border-border bg-surface px-3 py-2 text-foreground"
+                >
                   {c}
                 </li>
               ))
@@ -223,7 +277,9 @@ function ProfilePage() {
             <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-gold-foreground/80">
               <Pin className="h-3 w-3" /> Doctor-pinned memory · permanent AI context
             </div>
-            <p className="mt-2 font-serif text-lg leading-snug text-foreground">{patient.pinnedByDoctor}</p>
+            <p className="mt-2 font-serif text-lg leading-snug text-foreground">
+              {patient.pinnedByDoctor}
+            </p>
           </div>
         </div>
 
@@ -239,7 +295,9 @@ function ProfilePage() {
                         {t.since}
                       </div>
                       <div className="mt-1 text-sm font-medium text-foreground">{t.label}</div>
-                      <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{t.details}</div>
+                      <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {t.details}
+                      </div>
                     </li>
                   ))
               ) : (
@@ -271,7 +329,11 @@ function ProfilePage() {
                         Layer {layer}
                       </div>
                       <h3 className="mt-1 font-serif text-base text-foreground">
-                        {layer === 1 ? "Profile facts" : layer === 2 ? "Patterns & medication signals" : "Recent events"}
+                        {layer === 1
+                          ? "Profile facts"
+                          : layer === 2
+                            ? "Patterns & medication signals"
+                            : "Recent events"}
                       </h3>
                     </div>
 
@@ -280,17 +342,27 @@ function ProfilePage() {
                         layerMemories.map((memory) => {
                           const isEditing = editingMemory === memory.id;
                           return (
-                            <article key={memory.id} className="rounded border border-border bg-card p-3">
+                            <article
+                              key={memory.id}
+                              className="rounded border border-border bg-card p-3"
+                            >
                               {isEditing ? (
                                 <div className="space-y-2">
                                   <input
                                     value={draftMemory.label}
-                                    onChange={(e) => setDraftMemory((prev) => ({ ...prev, label: e.target.value }))}
+                                    onChange={(e) =>
+                                      setDraftMemory((prev) => ({ ...prev, label: e.target.value }))
+                                    }
                                     className="w-full rounded border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
                                   />
                                   <textarea
                                     value={draftMemory.details}
-                                    onChange={(e) => setDraftMemory((prev) => ({ ...prev, details: e.target.value }))}
+                                    onChange={(e) =>
+                                      setDraftMemory((prev) => ({
+                                        ...prev,
+                                        details: e.target.value,
+                                      }))
+                                    }
                                     className="min-h-24 w-full rounded border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
                                   />
                                   <div className="flex gap-2">
@@ -314,7 +386,9 @@ function ProfilePage() {
                                 <>
                                   <div className="flex items-start justify-between gap-3">
                                     <div>
-                                      <h4 className="text-sm font-medium text-foreground">{memory.label}</h4>
+                                      <h4 className="text-sm font-medium text-foreground">
+                                        {memory.label}
+                                      </h4>
                                       <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                                         Saved {memory.since}
                                       </div>
@@ -338,7 +412,9 @@ function ProfilePage() {
                                       </button>
                                     </div>
                                   </div>
-                                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{memory.details}</p>
+                                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                    {memory.details}
+                                  </p>
                                 </>
                               )}
                             </article>

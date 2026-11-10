@@ -1,11 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Loader2, LogIn, Stethoscope, UserRound } from "lucide-react";
-import { ensurePatientAccount } from "@/api/auth";
-import { getUserRole, useAuth, type UserRole } from "@/lib/auth";
+import { useAuth, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect:
+      typeof search.redirect === "string" &&
+      /^\/(?![\\/])/.test(search.redirect) &&
+      search.redirect.split(/[?#]/)[0] !== "/auth"
+        ? search.redirect
+        : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Sign in · Curable" },
@@ -25,6 +32,7 @@ function readListField(value: string) {
 function AuthPage() {
   const navigate = useNavigate();
   const auth = useAuth();
+  const { redirect } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [role, setRole] = useState<UserRole>("patient");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,9 +40,12 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth.session || auth.isLoading) return;
-    void navigate({ to: auth.role === "doctor" ? "/doctor" : "/chat" });
-  }, [auth.isLoading, auth.role, auth.session, navigate]);
+    if (!auth.session || auth.isLoading || auth.authError) return;
+    void navigate({
+      to: redirect || (auth.role === "doctor" ? "/doctor" : "/chat"),
+      replace: true,
+    });
+  }, [auth.isLoading, auth.role, auth.session, auth.authError, navigate, redirect]);
 
   const handleGoogleAuth = async () => {
     setIsSubmitting(true);
@@ -43,7 +54,9 @@ function AuthPage() {
 
     try {
       const redirectTo =
-        typeof window !== "undefined" ? `${window.location.origin}/auth` : undefined;
+        typeof window !== "undefined"
+          ? `${window.location.origin}/auth${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""}`
+          : undefined;
       const { error: googleError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -56,8 +69,8 @@ function AuthPage() {
       });
 
       if (googleError) throw googleError;
-    } catch (err: any) {
-      setError(err.message || "Could not continue with Google.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not continue with Google.");
       setIsSubmitting(false);
     }
   };
@@ -72,7 +85,7 @@ function AuthPage() {
     };
 
     const email = readField("email");
-    const password = readField("password");
+    const password = (fields.namedItem("password") as HTMLInputElement)?.value || "";
     const fullName = readField("fullName");
     const age = Number(readField("age") || 0);
     const sex = readField("sex");
@@ -119,6 +132,7 @@ function AuthPage() {
           email,
           password,
           options: {
+            emailRedirectTo: `${window.location.origin}/auth`,
             data: {
               role,
               full_name: fullName,
@@ -139,49 +153,23 @@ function AuthPage() {
 
         if (signUpError) throw signUpError;
 
-        if (data.session && role === "patient") {
-          await ensurePatientAccount({
-            data: {
-              accessToken: data.session.access_token,
-              fullName,
-              age,
-              sex,
-              bloodGroup,
-              genotype,
-              occupation,
-              location,
-              averageWaterDaily,
-              exerciseFrequency,
-              exerciseType,
-              allergies,
-              conditions,
-            },
-          });
-        }
-
         setNotice(
           data.session
             ? "Account created. Opening your workspace..."
             : "Account created. Check your email to confirm your login.",
         );
-
-        if (data.session) {
-          void navigate({ to: role === "doctor" ? "/doctor" : "/chat" });
-        }
       } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
         if (signInError) throw signInError;
 
-        const signedInRole = getUserRole(data.user);
         setNotice("Signed in. Opening your workspace...");
-        void navigate({ to: signedInRole === "doctor" ? "/doctor" : "/chat" });
       }
-    } catch (err: any) {
-      setError(err.message || "Could not complete sign in.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not complete sign in.");
     } finally {
       setIsSubmitting(false);
     }
@@ -270,7 +258,7 @@ function AuthPage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {mode === "signin"
                   ? "Use your Curable account details."
-                  : "Choose whether this account is for a patient or doctor."}
+                  : "Doctor access requires approval before the doctor dashboard is available."}
               </p>
             </div>
 
@@ -480,9 +468,7 @@ function AuthPage() {
                       />
                     </label>
                     <label className="text-sm sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Allergies
-                      </span>
+                      <span className="text-xs font-medium text-muted-foreground">Allergies</span>
                       <input
                         name="allergies"
                         placeholder="Penicillin, peanuts, dust, or none"
@@ -507,10 +493,20 @@ function AuthPage() {
               ) : null}
             </div>
 
-            {error ? (
+            {error || auth.authError ? (
               <div className="mt-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                {error}
+                {error || auth.authError}
               </div>
+            ) : null}
+
+            {auth.session && auth.authError ? (
+              <button
+                type="button"
+                onClick={() => void auth.signOut()}
+                className="mt-3 text-sm underline"
+              >
+                Sign out
+              </button>
             ) : null}
 
             {notice ? (

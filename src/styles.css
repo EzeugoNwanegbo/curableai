@@ -236,3 +236,35 @@
     }
   }
 }
+
+/* Shared palette for the connected Curable application. */
+.dark {
+  --background: #0b0c18;
+  --foreground: #f5f3ff;
+  --card: #141523;
+  --card-foreground: #f5f3ff;
+  --popover: #191a2c;
+  --popover-foreground: #f5f3ff;
+  --surface: #191a2a;
+  --surface-deep: #090a13;
+  --primary: #ad7cff;
+  --primary-foreground: #170f27;
+  --secondary: #242037;
+  --secondary-foreground: #e1d4f5;
+  --muted: #232236;
+  --muted-foreground: #aaa4bc;
+  --accent: #ed9bcd;
+  --accent-foreground: #241025;
+  --gold: #d9a5e6;
+  --gold-foreground: #241025;
+  --border: #ffffff14;
+  --input: #ffffff22;
+  --ring: #b28aff;
+  --radius: 1rem;
+}
+.cd-live-app .font-serif {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+.cd-live-app .shadow-elegant {
+  box-shadow: none;
+}

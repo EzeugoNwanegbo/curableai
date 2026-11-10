@@ -122,6 +122,7 @@ interface DoctorReport {
 }
 
 interface DoctorReviewUpdate {
+  consultationId?: string;
   outcome: "validated" | "consultation_started";
   title: string;
   doctorName: string;
@@ -164,6 +165,7 @@ function mapDbMessage(m: any): Message {
           doctorName: metadata.doctorName || "Doctor",
           doctorNote: metadata.doctorNote || m.content,
           actionLabel: metadata.actionLabel,
+          consultationId: metadata.consultationId,
         }
       : undefined,
   };
@@ -186,6 +188,7 @@ function ChatPage() {
   const [isCreatingReport, setIsCreatingReport] = useState(false);
   const [isSendingReport, setIsSendingReport] = useState(false);
   const [doctorReport, setDoctorReport] = useState<DoctorReport | null>(null);
+  const [reportConfirmed, setReportConfirmed] = useState(false);
   const [reportSent, setReportSent] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -195,12 +198,16 @@ function ChatPage() {
 
   const chatStateQuery = useQuery({
     queryKey: ["patient-chat-state", patientId],
+    refetchInterval: isSending ? false : 10000,
     enabled: Boolean(patientId),
     queryFn: () => getPatientChatState({ data: { patientId: patientId! } }),
   });
 
   const messages = useMemo(
-    () => allMessages.filter((message) => message.conversationId === activeConversationId),
+    () =>
+      allMessages.filter(
+        (message) => message.doctorReview || message.conversationId === activeConversationId,
+      ),
     [activeConversationId, allMessages],
   );
 
@@ -260,13 +267,15 @@ function ChatPage() {
             id: patientId,
             name: displayName,
             pinned: "",
-          }
+          },
     );
 
     if (state.messages) {
       const mappedMessages = state.messages.map(mapDbMessage);
       setAllMessages(mappedMessages);
-      setActiveConversationId(mappedMessages[mappedMessages.length - 1]?.conversationId || "current");
+      setActiveConversationId(
+        mappedMessages[mappedMessages.length - 1]?.conversationId || "current",
+      );
     }
 
     setDoctorConnection(state.doctorConnection || null);
@@ -280,7 +289,7 @@ function ChatPage() {
           month: "short",
           day: "numeric",
         }),
-      }))
+      })),
     );
   }, [chatStateQuery.data, chatStateQuery.error, displayName, patientId]);
 
@@ -381,8 +390,8 @@ function ChatPage() {
         rendered += word;
         setAllMessages((prev) =>
           prev.map((message) =>
-            message.id === aiMessageId ? { ...message, text: rendered } : message
-          )
+            message.id === aiMessageId ? { ...message, text: rendered } : message,
+          ),
         );
         await new Promise((resolve) => setTimeout(resolve, word.trim() ? 28 : 8));
       }
@@ -395,8 +404,8 @@ function ChatPage() {
                 ...message,
                 text: aiResponse.content,
               }
-            : message
-        )
+            : message,
+        ),
       );
 
       const freshState = await getPatientChatState({ data: { patientId: patient.id } });
@@ -445,6 +454,7 @@ function ChatPage() {
           reason,
         },
       });
+      setReportConfirmed(false);
       setDoctorReport(report as DoctorReport);
     } catch (err: any) {
       setError(err.message || "Could not create doctor report.");
@@ -454,7 +464,7 @@ function ChatPage() {
   };
 
   const handleSendReport = async () => {
-    if (!patient || !doctorReport || isSendingReport) return;
+    if (!patient || !doctorReport || isSendingReport || !reportConfirmed) return;
     if (!doctorConnection?.doctorName) {
       setReportError("Add a validating doctor from Add Doctor before sending this report.");
       return;
@@ -467,6 +477,7 @@ function ChatPage() {
           patientId: patient.id,
           doctor: doctorConnection,
           report: doctorReport,
+          confirmed: true,
         },
       });
       setReportSent(true);
@@ -503,7 +514,7 @@ function ChatPage() {
   return (
     <div
       className={`grid min-h-[calc(100vh-3.5rem)] grid-cols-1 lg:min-h-screen ${
-        isHistoryOpen ? "lg:grid-cols-[280px_1fr_360px]" : "lg:grid-cols-[72px_1fr_360px]"
+        isHistoryOpen ? "lg:grid-cols-[240px_1fr]" : "lg:grid-cols-[72px_1fr]"
       }`}
     >
       <aside className="hidden border-r border-border bg-card/60 p-3 lg:block">
@@ -578,9 +589,7 @@ function ChatPage() {
       <div className="flex h-[calc(100vh-3.5rem)] flex-col border-r border-border lg:h-screen">
         <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-5">
           <div className="hidden lg:block">
-            <h1 className="font-serif text-xl text-foreground">
-              AI Follow-up · {displayPatient.name}
-            </h1>
+            <h1 className="font-serif text-xl text-foreground">Curable · {displayPatient.name}</h1>
           </div>
           <button
             type="button"
@@ -594,14 +603,14 @@ function ChatPage() {
             <button
               type="button"
               onClick={() => setIsMobileContextOpen((value) => !value)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary lg:hidden"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary"
             >
               <BarChart3 className="h-3.5 w-3.5" /> Possible cases
             </button>
             {doctorConnection?.doctorName ? (
               <span className="hidden items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success lg:inline-flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />{" "}
-                {doctorConnection.doctorName} supervising
+                {doctorConnection.doctorName} selected for optional review
               </span>
             ) : null}
             {doctorConnection?.doctorName ? (
@@ -666,7 +675,7 @@ function ChatPage() {
         ) : null}
 
         {isMobileContextOpen ? (
-          <div className="max-h-[45vh] overflow-y-auto border-b border-border bg-surface px-4 py-4 lg:hidden">
+          <div className="max-h-[45vh] overflow-y-auto border-b border-border bg-surface px-4 py-4">
             <LiveReasoningPanel
               reasoning={latestReasoningMessage?.reasoning || null}
               isThinking={isSending}
@@ -746,9 +755,7 @@ function ChatPage() {
             </div>
           ))}
 
-          {isSending && !typingMessageId && (
-            <TypingIndicator />
-          )}
+          {isSending && !typingMessageId && <TypingIndicator />}
 
           {reportError ? (
             <div className="rounded-md border border-gold/40 bg-gold/10 p-3 text-sm leading-relaxed text-foreground">
@@ -783,7 +790,34 @@ function ChatPage() {
                     Situation summary
                   </span>
                 </div>
-                <p className="text-sm leading-relaxed text-foreground">{doctorReport.summary}</p>
+                <label className="block text-xs text-muted-foreground">
+                  Check and edit your summary
+                  <textarea
+                    aria-label="Your doctor summary"
+                    className="mt-2 w-full rounded-lg border border-input bg-background p-3 text-sm text-foreground"
+                    rows={5}
+                    value={doctorReport.summary}
+                    disabled={reportSent}
+                    onChange={(e) => {
+                      setReportConfirmed(false);
+                      setDoctorReport({ ...doctorReport, summary: e.target.value });
+                    }}
+                  />
+                </label>
+                <label className="mt-4 block text-xs text-muted-foreground">
+                  What do you want help with?
+                  <textarea
+                    aria-label="What you want from the doctor"
+                    className="mt-2 w-full rounded-lg border border-input bg-background p-3 text-sm text-foreground"
+                    rows={2}
+                    value={doctorReport.doctorQuestion}
+                    disabled={reportSent}
+                    onChange={(e) => {
+                      setReportConfirmed(false);
+                      setDoctorReport({ ...doctorReport, doctorQuestion: e.target.value });
+                    }}
+                  />
+                </label>
               </div>
 
               {doctorReport.reasoningSnapshot ? (
@@ -803,6 +837,19 @@ function ChatPage() {
                 </p>
               ) : null}
 
+              <label className="mt-5 flex items-start gap-3 text-xs leading-6 text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={reportConfirmed}
+                  disabled={reportSent}
+                  onChange={(e) => setReportConfirmed(e.target.checked)}
+                />
+                <span>
+                  I have checked this summary and agree to share it and my available health history
+                  with {doctorConnection?.doctorName || "my selected doctor"} for review.
+                </span>
+              </label>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
                   This sends the report to {doctorConnection?.doctorName || "your selected doctor"}.
@@ -811,7 +858,13 @@ function ChatPage() {
                 <button
                   type="button"
                   onClick={handleSendReport}
-                  disabled={isSendingReport || reportSent}
+                  disabled={
+                    isSendingReport ||
+                    reportSent ||
+                    !reportConfirmed ||
+                    !doctorReport.summary.trim() ||
+                    !doctorReport.doctorQuestion.trim()
+                  }
                   className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
                 >
                   {isSendingReport ? (
@@ -856,86 +909,6 @@ function ChatPage() {
           </p>
         </form>
       </div>
-
-      {/* Memory side panel */}
-      <aside className="hidden h-screen overflow-y-auto bg-surface px-6 py-7 lg:block">
-        <LiveReasoningPanel
-          reasoning={latestReasoningMessage?.reasoning || null}
-          isThinking={isSending}
-          onViewDetails={() => {
-            if (latestReasoningMessage?.id) setExpandedReasoningId(latestReasoningMessage.id);
-          }}
-        />
-
-        <div className="mt-6 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-          Active context
-        </div>
-        <h2 className="mt-2 font-serif text-lg text-foreground">Memory in this conversation</h2>
-
-        <div className="mt-5 grid gap-2 text-xs">
-          <div className="flex items-center gap-2 rounded border border-border bg-card px-3 py-2 text-foreground">
-            <UserRound className="h-3.5 w-3.5 text-primary" />
-            Profile, allergies, conditions
-          </div>
-          <div className="flex items-center gap-2 rounded border border-border bg-card px-3 py-2 text-foreground">
-            <Pill className="h-3.5 w-3.5 text-primary" />
-            Current medications and adherence
-          </div>
-          <div className="flex items-center gap-2 rounded border border-border bg-card px-3 py-2 text-foreground">
-            <Brain className="h-3.5 w-3.5 text-primary" />
-            Saved AI memory facts
-          </div>
-        </div>
-
-        {displayPatient.pinned && (
-          <div className="mt-5 rounded-md border border-gold/40 bg-gold/10 p-3 text-sm">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-gold-foreground/80">
-              <BookmarkCheck className="h-3 w-3" /> Doctor-pinned
-            </div>
-            <p className="mt-1 leading-relaxed text-foreground">{displayPatient.pinned}</p>
-          </div>
-        )}
-
-        <div className="mt-6 space-y-4">
-          {[1, 2, 3].map((layer) => (
-            <div key={layer}>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="font-mono text-[10px] text-muted-foreground">L{layer}</span>
-                <span className="text-xs font-medium uppercase tracking-wider text-foreground">
-                  {layer === 1 ? "Structured" : layer === 2 ? "Behavioral" : "Episodic"}
-                </span>
-              </div>
-              <ul className="space-y-1.5">
-                {memories
-                  .filter((s) => s.layer === layer)
-                  .map((s) => (
-                    <li
-                      key={s.id || s.label}
-                      className="rounded border border-border bg-card px-3 py-2 text-xs"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-foreground">{s.label}</span>
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          {s.since}
-                        </span>
-                      </div>
-                      {s.details ? (
-                        <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
-                          {s.details}
-                        </p>
-                      ) : null}
-                    </li>
-                  ))}
-                {memories.filter((s) => s.layer === layer).length === 0 ? (
-                  <li className="rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                    No saved facts yet.
-                  </li>
-                ) : null}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </aside>
     </div>
   );
 }
@@ -1328,6 +1301,7 @@ function DoctorReviewCard({ update, time }: { update: DoctorReviewUpdate; time: 
           </p>
           <Link
             to="/consultation"
+            search={{ id: update.consultationId }}
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-accent"
           >
             <MessageSquare className="h-3.5 w-3.5" /> {update.actionLabel || "Enter consultation"}

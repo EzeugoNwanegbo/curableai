@@ -30,8 +30,8 @@ function mapMedicationRow(m: any) {
 }
 
 export async function fetchMedicationsForPatient(patientId: string) {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
+  const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+  const client = await getAuthenticatedClient();
 
   const { data, error } = await client
     .from("medications")
@@ -51,46 +51,46 @@ export async function fetchMedicationsForPatient(patientId: string) {
   return [];
 }
 
-export const getAuthenticatedPatientMedications = createServerFn({
-  method: "GET",
-  validator: z.object({
-    patientId: z.string().uuid(),
-  }),
-}).handler(async ({ data: { patientId } }) => {
-  return fetchMedicationsForPatient(patientId);
-});
+export const getAuthenticatedPatientMedications = createServerFn({ method: "GET" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid(),
+    }),
+  )
+  .handler(async ({ data: { patientId } }) => {
+    return fetchMedicationsForPatient(patientId);
+  });
 
-export const addPatientMedication = createServerFn({
-  method: "POST",
-  validator: medicationSchema,
-}).handler(async ({ data }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
+export const addPatientMedication = createServerFn({ method: "POST" })
+  .inputValidator(medicationSchema)
+  .handler(async ({ data }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
 
-  if (!data.patientId) {
-    throw new Error("Please sign in before adding medication.");
-  }
+    if (!data.patientId) {
+      throw new Error("Please sign in before adding medication.");
+    }
 
-  const { data: inserted, error } = await client
-    .from("medications")
-    .insert({
-      patient_id: data.patientId,
-      name: data.name,
-      dosage: data.dosage,
-      frequency: data.frequency,
-      time: data.time,
-      purpose: data.purpose,
-      source: data.source,
-      side_effects: data.sideEffects,
-      adherence: data.adherence,
-      prescriber: data.prescriber,
-    })
-    .select("*")
-    .single();
+    const { data: inserted, error } = await client
+      .from("medications")
+      .insert({
+        patient_id: data.patientId,
+        name: data.name,
+        dosage: data.dosage,
+        frequency: data.frequency,
+        time: data.time,
+        purpose: data.purpose,
+        source: data.source,
+        side_effects: data.sideEffects,
+        adherence: data.adherence,
+        prescriber: data.prescriber,
+      })
+      .select("*")
+      .single();
 
-  if (error) {
-    throw error;
-  }
+    if (error) {
+      throw error;
+    }
 
-  return mapMedicationRow(inserted);
-});
+    return mapMedicationRow(inserted);
+  });

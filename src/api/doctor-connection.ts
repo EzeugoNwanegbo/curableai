@@ -26,7 +26,11 @@ function cleanText(value?: string | null) {
 
 function isMissingTableError(error: any) {
   const message = String(error?.message || "").toLowerCase();
-  return error?.code === "42P01" || message.includes("does not exist") || message.includes("schema cache");
+  return (
+    error?.code === "42P01" ||
+    message.includes("does not exist") ||
+    message.includes("schema cache")
+  );
 }
 
 function formatDoctorMemoryDetails(input: {
@@ -51,7 +55,11 @@ function parseDoctorMemory(details?: string | null) {
     .filter(Boolean);
 
   const findValue = (prefix: string) =>
-    cleanText(lines.find((line) => line.toLowerCase().startsWith(prefix.toLowerCase()))?.slice(prefix.length));
+    cleanText(
+      lines
+        .find((line) => line.toLowerCase().startsWith(prefix.toLowerCase()))
+        ?.slice(prefix.length),
+    );
 
   const doctorName = findValue("Doctor:") || cleanText(lines[0]?.replace(/^Doctor:\s*/i, ""));
   const doctorEmail = findValue("Email:");
@@ -64,7 +72,10 @@ function parseDoctorMemory(details?: string | null) {
   };
 }
 
-export async function readDoctorConnection(client: any, patientId: string): Promise<DoctorConnection | null> {
+export async function readDoctorConnection(
+  client: any,
+  patientId: string,
+): Promise<DoctorConnection | null> {
   try {
     const { data, error } = await client
       .from("patient_doctors")
@@ -153,13 +164,18 @@ async function saveDoctorMemory(client: any, input: z.infer<typeof doctorConnect
   if (error) throw error;
 }
 
-export async function saveDoctorConnectionRecord(client: any, input: z.infer<typeof doctorConnectionInput>) {
+export async function saveDoctorConnectionRecord(
+  client: any,
+  input: z.infer<typeof doctorConnectionInput>,
+) {
   const doctorName = cleanText(input.doctorName);
   const doctorEmail = cleanText(input.doctorEmail).toLowerCase();
   const clinicName = cleanText(input.clinicName);
   const cleaned = { patientId: input.patientId, doctorName, doctorEmail, clinicName };
 
   if (!doctorName) throw new Error("Add the doctor's name.");
+  if (!z.string().email().safeParse(doctorEmail).success)
+    throw new Error("Enter the doctor’s sign-in email so the request reaches the correct account.");
 
   try {
     const { error } = await client.from("patient_doctors").upsert(
@@ -171,7 +187,7 @@ export async function saveDoctorConnectionRecord(client: any, input: z.infer<typ
         status: "active",
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "patient_id" }
+      { onConflict: "patient_id" },
     );
 
     if (error) throw error;
@@ -185,54 +201,55 @@ export async function saveDoctorConnectionRecord(client: any, input: z.infer<typ
   return readDoctorConnection(client, cleaned.patientId);
 }
 
-export const getPatientDoctorConnection = createServerFn({
-  method: "GET",
-  validator: z.object({
-    patientId: z.string().uuid(),
-  }),
-}).handler(async ({ data: { patientId } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
-  return readDoctorConnection(client, patientId);
-});
+export const getPatientDoctorConnection = createServerFn({ method: "GET" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid(),
+    }),
+  )
+  .handler(async ({ data: { patientId } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
+    return readDoctorConnection(client, patientId);
+  });
 
-export const savePatientDoctorConnection = createServerFn({
-  method: "POST",
-  validator: doctorConnectionInput,
-}).handler(async ({ data }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
-  return saveDoctorConnectionRecord(client, data);
-});
+export const savePatientDoctorConnection = createServerFn({ method: "POST" })
+  .inputValidator(doctorConnectionInput)
+  .handler(async ({ data }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
+    return saveDoctorConnectionRecord(client, data);
+  });
 
-export const removePatientDoctorConnection = createServerFn({
-  method: "POST",
-  validator: z.object({
-    patientId: z.string().uuid(),
-  }),
-}).handler(async ({ data: { patientId } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
+export const removePatientDoctorConnection = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid(),
+    }),
+  )
+  .handler(async ({ data: { patientId } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
 
-  try {
-    await client.from("patient_doctors").delete().eq("patient_id", patientId);
-  } catch (error) {
-    if (!isMissingTableError(error)) {
-      console.warn("patient_doctors delete failed:", error);
+    try {
+      await client.from("patient_doctors").delete().eq("patient_id", patientId);
+    } catch (error) {
+      if (!isMissingTableError(error)) {
+        console.warn("patient_doctors delete failed:", error);
+      }
     }
-  }
 
-  const { data: memories } = await client
-    .from("memory_snapshots")
-    .select("id")
-    .eq("patient_id", patientId)
-    .eq("label", DOCTOR_MEMORY_LABEL);
+    const { data: memories } = await client
+      .from("memory_snapshots")
+      .select("id")
+      .eq("patient_id", patientId)
+      .eq("label", DOCTOR_MEMORY_LABEL);
 
-  const ids = (memories || []).map((memory: any) => memory.id).filter(Boolean);
-  if (ids.length) {
-    const { error } = await client.from("memory_snapshots").delete().in("id", ids);
-    if (error) throw error;
-  }
+    const ids = (memories || []).map((memory: any) => memory.id).filter(Boolean);
+    if (ids.length) {
+      const { error } = await client.from("memory_snapshots").delete().in("id", ids);
+      if (error) throw error;
+    }
 
-  return { ok: true };
-});
+    return { ok: true };
+  });

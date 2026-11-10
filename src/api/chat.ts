@@ -694,131 +694,133 @@ function normalizeDoctorReport(report: any, reason: string, fallbackReasoningSna
   };
 }
 
-export const getPatientChatState = createServerFn({
-  method: "GET",
-  validator: z.object({
-    patientId: z.string().uuid(),
-  }),
-}).handler(async ({ data: { patientId } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
+export const getPatientChatState = createServerFn({ method: "GET" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid(),
+    }),
+  )
+  .handler(async ({ data: { patientId } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
 
-  const [
-    { data: patient, error: patientError },
-    { data: messages, error: messageError },
-    { data: memories, error: memoryError },
-  ] = await Promise.all([
-    client.from("patients").select("*").eq("id", patientId).single(),
-    client
-      .from("messages")
-      .select("*")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: true }),
-    client
-      .from("memory_snapshots")
-      .select("*")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: false }),
-  ]);
+    const [
+      { data: patient, error: patientError },
+      { data: messages, error: messageError },
+      { data: memories, error: memoryError },
+    ] = await Promise.all([
+      client.from("patients").select("*").eq("id", patientId).single(),
+      client
+        .from("messages")
+        .select("*")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: true }),
+      client
+        .from("memory_snapshots")
+        .select("*")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false }),
+    ]);
 
-  if (patientError) throw patientError;
-  if (messageError) throw messageError;
-  if (memoryError) throw memoryError;
+    if (patientError) throw patientError;
+    if (messageError) throw messageError;
+    if (memoryError) throw memoryError;
 
-  return {
-    patient,
-    messages: messages || [],
-    memories: memories || [],
-    doctorConnection: await readDoctorConnection(client, patientId),
-  };
-});
-
-export const sendMessage = createServerFn({
-  method: "POST",
-  validator: z.object({
-    patientId: z.string().uuid(),
-    message: z.string(),
-    conversationId: z.string().optional(),
-  }),
-}).handler(async ({ data: { patientId, message, conversationId } }) => {
-  // Move server-only imports inside the handler
-  const { OpenAI } = await import("openai");
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
+    return {
+      patient,
+      messages: messages || [],
+      memories: memories || [],
+      doctorConnection: await readDoctorConnection(client, patientId),
+    };
   });
-  const deepseek = process.env.DEEPSEEK_API_KEY
-    ? new OpenAI({
-        apiKey: process.env.DEEPSEEK_API_KEY,
-        baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL,
-      })
-    : null;
 
-  // 1. Fetch Patient Context
-  const recentMessagesQuery = client
-    .from("messages")
-    .select("role, content, created_at")
-    .eq("patient_id", patientId)
-    .order("created_at", { ascending: false })
-    .limit(10);
+export const sendMessage = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid(),
+      message: z.string(),
+      conversationId: z.string().optional(),
+    }),
+  )
+  .handler(async ({ data: { patientId, message, conversationId } }) => {
+    // Move server-only imports inside the handler
+    const { OpenAI } = await import("openai");
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
 
-  if (conversationId) {
-    recentMessagesQuery.contains("metadata", { conversationId });
-  }
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
+    });
+    const deepseek = process.env.DEEPSEEK_API_KEY
+      ? new OpenAI({
+          apiKey: process.env.DEEPSEEK_API_KEY,
+          baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL,
+        })
+      : null;
 
-  const [{ data: patient }, { data: memory }, { data: recentMessages }] = await Promise.all([
-    client.from("patients").select("*").eq("id", patientId).single(),
-    client
-      .from("memory_snapshots")
-      .select("*")
+    // 1. Fetch Patient Context
+    const recentMessagesQuery = client
+      .from("messages")
+      .select("role, content, created_at")
       .eq("patient_id", patientId)
       .order("created_at", { ascending: false })
-      .limit(24),
-    recentMessagesQuery,
-  ]);
+      .limit(10);
 
-  if (!patient) throw new Error("Patient not found");
+    if (conversationId) {
+      recentMessagesQuery.contains("metadata", { conversationId });
+    }
 
-  const { error: patientMessageError } = await client.from("messages").insert({
-    patient_id: patientId,
-    role: "patient",
-    content: message,
-    metadata: conversationId ? { conversationId } : {},
-  });
-  if (patientMessageError) throw patientMessageError;
+    const [{ data: patient }, { data: memory }, { data: recentMessages }] = await Promise.all([
+      client.from("patients").select("*").eq("id", patientId).single(),
+      client
+        .from("memory_snapshots")
+        .select("*")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false })
+        .limit(24),
+      recentMessagesQuery,
+    ]);
 
-  // 2. Format Context for AI
-  const patientMedications = await fetchMedicationsForPatient(patientId);
-  const medicationContext = patientMedications
-    .map((m) => {
-      const sideEffects = m.sideEffects.length
-        ? `; reported side effects: ${m.sideEffects.join(", ")}`
-        : "";
-      return `- ${m.name} ${m.dosage}, ${m.frequency} at ${m.time}; purpose: ${m.purpose}; source: ${m.source}; adherence: ${Math.round(m.adherence * 100)}%; prescriber: ${m.prescriber}${sideEffects}`;
-    })
-    .join("\n");
+    if (!patient) throw new Error("Patient not found");
 
-  const memoryContext = memory?.length
-    ? memory
-        .map(
-          (m) =>
-            `- [L${m.layer}: ${memoryLayerNames[m.layer] || "Memory"}] ${m.label}: ${m.details}`,
-        )
-        .join("\n")
-    : "No saved health memory yet.";
+    const { error: patientMessageError } = await client.from("messages").insert({
+      patient_id: patientId,
+      role: "patient",
+      content: message,
+      metadata: conversationId ? { conversationId } : {},
+    });
+    if (patientMessageError) throw patientMessageError;
 
-  const recentConversationContext = recentMessages?.length
-    ? recentMessages
-        .slice()
-        .reverse()
-        .map((m) => `${m.role}: ${m.content}`)
-        .join("\n")
-    : "No prior messages in this chat.";
+    // 2. Format Context for AI
+    const patientMedications = await fetchMedicationsForPatient(patientId);
+    const medicationContext = patientMedications
+      .map((m) => {
+        const sideEffects = m.sideEffects.length
+          ? `; reported side effects: ${m.sideEffects.join(", ")}`
+          : "";
+        return `- ${m.name} ${m.dosage}, ${m.frequency} at ${m.time}; purpose: ${m.purpose}; source: ${m.source}; adherence: ${Math.round(m.adherence * 100)}%; prescriber: ${m.prescriber}${sideEffects}`;
+      })
+      .join("\n");
 
-  const today = new Date().toISOString().slice(0, 10);
-  const contextStr = `
+    const memoryContext = memory?.length
+      ? memory
+          .map(
+            (m) =>
+              `- [L${m.layer}: ${memoryLayerNames[m.layer] || "Memory"}] ${m.label}: ${m.details}`,
+          )
+          .join("\n")
+      : "No saved health memory yet.";
+
+    const recentConversationContext = recentMessages?.length
+      ? recentMessages
+          .slice()
+          .reverse()
+          .map((m) => `${m.role}: ${m.content}`)
+          .join("\n")
+      : "No prior messages in this chat.";
+
+    const today = new Date().toISOString().slice(0, 10);
+    const contextStr = `
 Today's date: ${today}
 Patient: ${patient.full_name} (${patient.age}y, ${patient.sex})
 Known Conditions: ${patient.conditions?.join(", ") || "None"}
@@ -835,12 +837,12 @@ Recent Conversation:
 ${recentConversationContext}
     `.trim();
 
-  // 3. Call OpenAI, with a local safety fallback if quota is unavailable.
-  let fullContent = "";
-  const chatMessages = [
-    {
-      role: "system" as const,
-      content: `You are Curable AI, a context-aware health reasoning assistant.
+    // 3. Call OpenAI, with a local safety fallback if quota is unavailable.
+    let fullContent = "";
+    const chatMessages = [
+      {
+        role: "system" as const,
+        content: `You are Curable AI, a context-aware health reasoning assistant.
 Your goal is to help the patient explain what they feel, narrow what it could be, and know what to do next through careful adaptive questioning.
 
 ### INTERNAL ORCHESTRATOR:
@@ -896,205 +898,206 @@ Graph guidance:
 Example:
 "I understand. When did the fever start? [SIGNAL: Fever report | 3 | Patient reports fever] [ESCALATE: low | Fever reported | Continue guided questioning] <curable_reasoning>{"stage":"collecting","readiness":"collecting","concernSummary":"Patient reports fever, but timing is not clear yet.","timeline":[{"event":"Fever reported","whenText":"not yet known","estimatedDate":"","certainty":"unknown","source":"chat_message"}],"nextQuestion":"When did the fever start?","possibleConditions":[{"name":"Malaria","score":45,"matchLabel":"Partial match","support":["Fever can fit malaria patterns, especially depending on region."],"weakens":["Timing, chills, sweating, and test result are not known yet."]},{"name":"Viral infection","score":42,"matchLabel":"Partial match","support":["Fever can also fit many viral illnesses."],"weakens":["No respiratory, stomach, or exposure details are known yet."]}],"stewardship":{"nextAction":"ask_one_question","reason":"Onset is the first missing timeline detail.","shouldOfferDoctorValidation":false,"shouldWarnUrgentCare":false,"shouldStopQuestioning":false},"usedContext":{"profile":[],"medications":[],"memory":[],"conversation":["Current fever report"]}}</curable_reasoning>"
 `,
-    },
-    { role: "user" as const, content: `CONTEXT:\n${contextStr}\n\nUSER MESSAGE: ${message}` },
-  ];
+      },
+      { role: "user" as const, content: `CONTEXT:\n${contextStr}\n\nUSER MESSAGE: ${message}` },
+    ];
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
-      messages: chatMessages,
-    });
+    try {
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_MODEL || "gpt-4o",
+        messages: chatMessages,
+      });
 
-    fullContent = response.choices[0].message.content || "";
-  } catch (openAiErr) {
-    if (deepseek) {
-      try {
-        const response = await deepseek.chat.completions.create({
-          model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
-          messages: chatMessages,
-        });
+      fullContent = response.choices[0].message.content || "";
+    } catch (openAiErr) {
+      if (deepseek) {
+        try {
+          const response = await deepseek.chat.completions.create({
+            model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
+            messages: chatMessages,
+          });
 
-        fullContent = response.choices[0].message.content || "";
-      } catch (deepseekErr) {
-        console.warn("OpenAI and DeepSeek chat unavailable; using local Curable fallback.", {
+          fullContent = response.choices[0].message.content || "";
+        } catch (deepseekErr) {
+          console.warn("OpenAI and DeepSeek chat unavailable; using local Curable fallback.", {
+            openAiErr,
+            deepseekErr,
+          });
+          fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
+        }
+      } else {
+        console.warn(
+          "OpenAI chat unavailable and no DeepSeek key is configured; using local Curable fallback.",
           openAiErr,
-          deepseekErr,
-        });
+        );
         fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
       }
-    } else {
-      console.warn(
-        "OpenAI chat unavailable and no DeepSeek key is configured; using local Curable fallback.",
-        openAiErr,
-      );
-      fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
     }
-  }
 
-  // 4. Parse Metadata Tags
-  const signals: { label: string; layer: number; details: string }[] = [];
-  let escalation: { risk: string; summary: string; recommendation: string } | null = null;
-  const reasoning = parseReasoning(fullContent);
+    // 4. Parse Metadata Tags
+    const signals: { label: string; layer: number; details: string }[] = [];
+    let escalation: { risk: string; summary: string; recommendation: string } | null = null;
+    const reasoning = parseReasoning(fullContent);
 
-  // Regex to find [SIGNAL: ...]
-  const signalRegex = /\[SIGNAL:\s*(.*?)\s*\|\s*(\d)\s*\|\s*(.*?)\s*\]/g;
-  let match;
-  while ((match = signalRegex.exec(fullContent)) !== null) {
-    signals.push({
-      label: match[1],
-      layer: parseInt(match[2]),
-      details: match[3],
-    });
-  }
+    // Regex to find [SIGNAL: ...]
+    const signalRegex = /\[SIGNAL:\s*(.*?)\s*\|\s*(\d)\s*\|\s*(.*?)\s*\]/g;
+    let match;
+    while ((match = signalRegex.exec(fullContent)) !== null) {
+      signals.push({
+        label: match[1],
+        layer: parseInt(match[2]),
+        details: match[3],
+      });
+    }
 
-  // Regex to find [ESCALATE: ...]
-  const escalateRegex = /\[ESCALATE:\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\]/;
-  const escalateMatch = fullContent.match(escalateRegex);
-  if (escalateMatch) {
-    escalation = {
-      risk: escalateMatch[1].toLowerCase(),
-      summary: escalateMatch[2],
-      recommendation: escalateMatch[3],
-    };
-  }
+    // Regex to find [ESCALATE: ...]
+    const escalateRegex = /\[ESCALATE:\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\]/;
+    const escalateMatch = fullContent.match(escalateRegex);
+    if (escalateMatch) {
+      escalation = {
+        risk: escalateMatch[1].toLowerCase(),
+        summary: escalateMatch[2],
+        recommendation: escalateMatch[3],
+      };
+    }
 
-  // 5. Clean Content (Strip Tags)
-  const cleanContent = stripClinicalTags(fullContent);
+    // 5. Clean Content (Strip Tags)
+    const cleanContent = stripClinicalTags(fullContent);
 
-  // 6. Persistence
-  // Save AI Message
-  const { data: msgData, error: msgError } = await client
-    .from("messages")
-    .insert({
-      patient_id: patientId,
-      role: "ai",
-      content: cleanContent,
-      metadata: { signals, escalation, reasoning, original_content: fullContent, conversationId },
-    })
-    .select()
-    .single();
+    // 6. Persistence
+    // Save AI Message
+    const { data: msgData, error: msgError } = await client
+      .from("messages")
+      .insert({
+        patient_id: patientId,
+        role: "ai",
+        content: cleanContent,
+        metadata: { signals, escalation, reasoning, original_content: fullContent, conversationId },
+      })
+      .select()
+      .single();
 
-  if (msgError) console.error("Error saving message:", msgError);
+    if (msgError) console.error("Error saving message:", msgError);
 
-  // Save Signals to Memory
-  if (signals.length > 0) {
-    for (const signal of signals) {
-      const { data: existing } = await client
-        .from("memory_snapshots")
-        .select("id, details")
-        .eq("patient_id", patientId)
-        .eq("layer", signal.layer)
-        .ilike("label", signal.label)
-        .maybeSingle();
-
-      if (existing) {
-        await client
+    // Save Signals to Memory
+    if (signals.length > 0) {
+      for (const signal of signals) {
+        const { data: existing } = await client
           .from("memory_snapshots")
-          .update({
-            details:
-              existing.details && existing.details !== signal.details
-                ? `${existing.details}\nUpdate: ${signal.details}`
-                : signal.details,
+          .select("id, details")
+          .eq("patient_id", patientId)
+          .eq("layer", signal.layer)
+          .ilike("label", signal.label)
+          .maybeSingle();
+
+        if (existing) {
+          await client
+            .from("memory_snapshots")
+            .update({
+              details:
+                existing.details && existing.details !== signal.details
+                  ? `${existing.details}\nUpdate: ${signal.details}`
+                  : signal.details,
+              source_message_id: msgData?.id,
+            })
+            .eq("id", existing.id);
+        } else {
+          await client.from("memory_snapshots").insert({
+            patient_id: patientId,
+            label: signal.label,
+            layer: signal.layer,
+            details: signal.details,
             source_message_id: msgData?.id,
-          })
-          .eq("id", existing.id);
-      } else {
-        await client.from("memory_snapshots").insert({
-          patient_id: patientId,
-          label: signal.label,
-          layer: signal.layer,
-          details: signal.details,
-          source_message_id: msgData?.id,
-        });
+          });
+        }
       }
     }
-  }
 
-  // Doctor review is patient-initiated through the report flow, not automatic chat escalation.
+    // Doctor review is patient-initiated through the report flow, not automatic chat escalation.
 
-  return {
-    id: msgData?.id,
-    role: "ai",
-    content: cleanContent,
-    time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    risk: escalation?.risk,
-    reasoning,
-    memoriesAdded: signals.map((s) => ({
-      label: s.label,
-      layer: s.layer,
-      details: s.details,
-    })),
-  };
-});
-
-export const createDoctorReviewReport = createServerFn({
-  method: "POST",
-  validator: z.object({
-    patientId: z.string().uuid(),
-    reason: z.string().min(1),
-  }),
-}).handler(async ({ data: { patientId, reason } }) => {
-  const { OpenAI } = await import("openai");
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
+    return {
+      id: msgData?.id,
+      role: "ai",
+      content: cleanContent,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      risk: escalation?.risk,
+      reasoning,
+      memoriesAdded: signals.map((s) => ({
+        label: s.label,
+        layer: s.layer,
+        details: s.details,
+      })),
+    };
   });
-  const deepseek = process.env.DEEPSEEK_API_KEY
-    ? new OpenAI({
-        apiKey: process.env.DEEPSEEK_API_KEY,
-        baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL,
-      })
-    : null;
 
-  const [{ data: patient }, { data: memory }, { data: recentMessages }] = await Promise.all([
-    client.from("patients").select("*").eq("id", patientId).single(),
-    client
-      .from("memory_snapshots")
-      .select("*")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: false })
-      .limit(16),
-    client
-      .from("messages")
-      .select("role, content, created_at, metadata")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: false })
-      .limit(12),
-  ]);
+export const createDoctorReviewReport = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid(),
+      reason: z.string().min(1),
+    }),
+  )
+  .handler(async ({ data: { patientId, reason } }) => {
+    const { OpenAI } = await import("openai");
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
 
-  if (!patient) throw new Error("Patient not found");
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
+    });
+    const deepseek = process.env.DEEPSEEK_API_KEY
+      ? new OpenAI({
+          apiKey: process.env.DEEPSEEK_API_KEY,
+          baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL,
+        })
+      : null;
 
-  const patientMedications = await fetchMedicationsForPatient(patientId);
-  const medicationContext = patientMedications
-    .map(
-      (m) =>
-        `${m.name} ${m.dosage}, ${m.frequency}; ${m.purpose}; adherence ${Math.round(m.adherence * 100)}%`,
-    )
-    .join("\n");
+    const [{ data: patient }, { data: memory }, { data: recentMessages }] = await Promise.all([
+      client.from("patients").select("*").eq("id", patientId).single(),
+      client
+        .from("memory_snapshots")
+        .select("*")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false })
+        .limit(16),
+      client
+        .from("messages")
+        .select("role, content, created_at, metadata")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false })
+        .limit(12),
+    ]);
 
-  const memoryContext = memory?.length
-    ? memory.map((m) => `[L${m.layer}] ${m.label}: ${m.details}`).join("\n")
-    : "No saved memory facts yet.";
+    if (!patient) throw new Error("Patient not found");
 
-  const recentConversation = recentMessages?.length
-    ? recentMessages
-        .slice()
-        .reverse()
-        .map((m) => `${m.role}: ${m.content}`)
-        .join("\n")
-    : "No recent conversation.";
-  const latestReasoningSnapshot = getLatestReasoningSnapshot(recentMessages || []);
-  const reasoningContext = latestReasoningSnapshot
-    ? formatReasoningSnapshotForReport(latestReasoningSnapshot).join("\n")
-    : "No live reasoning snapshot has been captured yet.";
+    const patientMedications = await fetchMedicationsForPatient(patientId);
+    const medicationContext = patientMedications
+      .map(
+        (m) =>
+          `${m.name} ${m.dosage}, ${m.frequency}; ${m.purpose}; adherence ${Math.round(m.adherence * 100)}%`,
+      )
+      .join("\n");
 
-  const reportMessages = [
-    {
-      role: "system" as const,
-      content: `Create a concise doctor handoff report from an AI care assistant.
+    const memoryContext = memory?.length
+      ? memory.map((m) => `[L${m.layer}] ${m.label}: ${m.details}`).join("\n")
+      : "No saved memory facts yet.";
+
+    const recentConversation = recentMessages?.length
+      ? recentMessages
+          .slice()
+          .reverse()
+          .map((m) => `${m.role}: ${m.content}`)
+          .join("\n")
+      : "No recent conversation.";
+    const latestReasoningSnapshot = getLatestReasoningSnapshot(recentMessages || []);
+    const reasoningContext = latestReasoningSnapshot
+      ? formatReasoningSnapshotForReport(latestReasoningSnapshot).join("\n")
+      : "No live reasoning snapshot has been captured yet.";
+
+    const reportMessages = [
+      {
+        role: "system" as const,
+        content: `Create a concise doctor handoff report from an AI care assistant.
 Do not diagnose. Do not invent facts. Write for a busy doctor.
 Use the supplied reasoning snapshot as a frozen copy of what Curable had reasoned at report time.
 Return only valid JSON with these keys:
@@ -1117,10 +1120,10 @@ Return only valid JSON with these keys:
   },
   "aiSafetyNote": "what the AI advised or avoided advising"
 }`,
-    },
-    {
-      role: "user" as const,
-      content: `Reason for doctor review: ${reason}
+      },
+      {
+        role: "user" as const,
+        content: `Reason for doctor review: ${reason}
 
 Patient:
 ${patient.full_name}, ${patient.age}y, ${patient.sex}
@@ -1139,35 +1142,49 @@ ${recentConversation}
 
 Frozen Curable reasoning snapshot:
 ${reasoningContext}`,
-    },
-  ];
+      },
+    ];
 
-  let report;
-  try {
-    const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
-      messages: reportMessages,
-    });
+    let report;
+    try {
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_MODEL || "gpt-4o",
+        messages: reportMessages,
+      });
 
-    const raw = response.choices[0].message.content || "{}";
-    report = normalizeDoctorReport(parseReportJson(raw), reason, latestReasoningSnapshot);
-  } catch (openAiErr) {
-    if (deepseek) {
-      try {
-        const response = await deepseek.chat.completions.create({
-          model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
-          messages: reportMessages,
-        });
+      const raw = response.choices[0].message.content || "{}";
+      report = normalizeDoctorReport(parseReportJson(raw), reason, latestReasoningSnapshot);
+    } catch (openAiErr) {
+      if (deepseek) {
+        try {
+          const response = await deepseek.chat.completions.create({
+            model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
+            messages: reportMessages,
+          });
 
-        const raw = response.choices[0].message.content || "{}";
-        report = normalizeDoctorReport(parseReportJson(raw), reason, latestReasoningSnapshot);
-      } catch (deepseekErr) {
+          const raw = response.choices[0].message.content || "{}";
+          report = normalizeDoctorReport(parseReportJson(raw), reason, latestReasoningSnapshot);
+        } catch (deepseekErr) {
+          console.warn(
+            "OpenAI and DeepSeek report generation unavailable; using structured fallback report.",
+            {
+              openAiErr,
+              deepseekErr,
+            },
+          );
+          report = buildFallbackReport(
+            reason,
+            patient,
+            patientMedications,
+            memory || [],
+            recentMessages || [],
+            latestReasoningSnapshot,
+          );
+        }
+      } else {
         console.warn(
-          "OpenAI and DeepSeek report generation unavailable; using structured fallback report.",
-          {
-            openAiErr,
-            deepseekErr,
-          },
+          "OpenAI report generation unavailable and no DeepSeek key is configured; using structured fallback report.",
+          openAiErr,
         );
         report = buildFallbackReport(
           reason,
@@ -1178,110 +1195,100 @@ ${reasoningContext}`,
           latestReasoningSnapshot,
         );
       }
-    } else {
-      console.warn(
-        "OpenAI report generation unavailable and no DeepSeek key is configured; using structured fallback report.",
-        openAiErr,
-      );
-      report = buildFallbackReport(
-        reason,
-        patient,
-        patientMedications,
-        memory || [],
-        recentMessages || [],
-        latestReasoningSnapshot,
+    }
+
+    return report;
+  });
+
+export const sendDoctorReviewReport = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      patientId: z.string().uuid(),
+      confirmed: z.literal(true),
+      doctor: z
+        .object({
+          doctorName: z.string().optional(),
+          doctorEmail: z.string().optional(),
+          clinicName: z.string().optional(),
+        })
+        .optional(),
+      report: z.object({
+        summary: z.string(),
+        risk: z.string(),
+        doctorQuestion: z.string(),
+        patientContext: z.array(z.string()).optional(),
+        medicationContext: z.array(z.string()).optional(),
+        memoryContext: z.array(z.string()).optional(),
+        recentConversation: z.array(z.string()).optional(),
+        reasoningSnapshot: z.any().optional(),
+        aiSafetyNote: z.string().optional(),
+      }),
+    }),
+  )
+  .handler(async ({ data: { patientId, report, doctor } }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
+    const savedDoctor = await readDoctorConnection(client, patientId);
+    const assignedDoctor = {
+      doctorName: doctor?.doctorName?.trim() || savedDoctor?.doctorName || "",
+      doctorEmail: doctor?.doctorEmail?.trim() || savedDoctor?.doctorEmail || "",
+      clinicName: doctor?.clinicName?.trim() || savedDoctor?.clinicName || "",
+    };
+
+    if (!assignedDoctor.doctorName) {
+      throw new Error(
+        "Add a validating doctor in Consultation before sending a doctor review report.",
       );
     }
-  }
 
-  return report;
-});
+    const detailLines = [
+      `Assigned doctor: ${assignedDoctor.doctorName}${assignedDoctor.doctorEmail ? ` (${assignedDoctor.doctorEmail})` : ""}`,
+      assignedDoctor.clinicName ? `Clinic: ${assignedDoctor.clinicName}` : "",
+      `Doctor question: ${report.doctorQuestion}`,
+      report.aiSafetyNote ? `AI safety note: ${report.aiSafetyNote}` : "",
+      ...(report.patientContext?.map((item) => `Patient: ${item}`) || []),
+      ...(report.medicationContext?.map((item) => `Medication: ${item}`) || []),
+      ...(report.memoryContext?.map((item) => `Memory: ${item}`) || []),
+      ...(report.recentConversation?.map((item) => `Recent chat: ${item}`) || []),
+      ...formatReasoningSnapshotForReport(report.reasoningSnapshot),
+    ].filter(Boolean);
 
-export const sendDoctorReviewReport = createServerFn({
-  method: "POST",
-  validator: z.object({
-    patientId: z.string().uuid(),
-    doctor: z
-      .object({
-        doctorName: z.string().optional(),
-        doctorEmail: z.string().optional(),
-        clinicName: z.string().optional(),
+    const { data, error } = await client
+      .from("review_queue")
+      .insert({
+        patient_id: patientId,
+        summary: report.summary,
+        risk_level: report.risk,
+        ai_recommendation: detailLines.join("\n"),
+        status: "pending",
+        confirmed_at: new Date().toISOString(),
       })
-      .optional(),
-    report: z.object({
-      summary: z.string(),
-      risk: z.string(),
-      doctorQuestion: z.string(),
-      patientContext: z.array(z.string()).optional(),
-      medicationContext: z.array(z.string()).optional(),
-      memoryContext: z.array(z.string()).optional(),
-      recentConversation: z.array(z.string()).optional(),
-      reasoningSnapshot: z.any().optional(),
-      aiSafetyNote: z.string().optional(),
-    }),
-  }),
-}).handler(async ({ data: { patientId, report, doctor } }) => {
-  const { supabase, supabaseAdmin } = await import("@/lib/supabase");
-  const client = supabaseAdmin || supabase;
-  const savedDoctor = await readDoctorConnection(client, patientId);
-  const assignedDoctor = {
-    doctorName: doctor?.doctorName?.trim() || savedDoctor?.doctorName || "",
-    doctorEmail: doctor?.doctorEmail?.trim() || savedDoctor?.doctorEmail || "",
-    clinicName: doctor?.clinicName?.trim() || savedDoctor?.clinicName || "",
-  };
+      .select("id")
+      .single();
 
-  if (!assignedDoctor.doctorName) {
-    throw new Error(
-      "Add a validating doctor in Consultation before sending a doctor review report.",
-    );
-  }
+    if (error) throw error;
 
-  const detailLines = [
-    `Assigned doctor: ${assignedDoctor.doctorName}${assignedDoctor.doctorEmail ? ` (${assignedDoctor.doctorEmail})` : ""}`,
-    assignedDoctor.clinicName ? `Clinic: ${assignedDoctor.clinicName}` : "",
-    `Doctor question: ${report.doctorQuestion}`,
-    report.aiSafetyNote ? `AI safety note: ${report.aiSafetyNote}` : "",
-    ...(report.patientContext?.map((item) => `Patient: ${item}`) || []),
-    ...(report.medicationContext?.map((item) => `Medication: ${item}`) || []),
-    ...(report.memoryContext?.map((item) => `Memory: ${item}`) || []),
-    ...(report.recentConversation?.map((item) => `Recent chat: ${item}`) || []),
-    ...formatReasoningSnapshotForReport(report.reasoningSnapshot),
-  ].filter(Boolean);
+    try {
+      const { error: reportError } = await client.from("doctor_reports").insert({
+        review_id: data?.id,
+        patient_id: patientId,
+        summary: report.summary,
+        risk_level: report.risk,
+        doctor_question: report.doctorQuestion,
+        patient_context: report.patientContext || [],
+        medication_context: report.medicationContext || [],
+        memory_context: report.memoryContext || [],
+        recent_conversation: report.recentConversation || [],
+        ai_safety_note: report.aiSafetyNote || null,
+        status: "sent",
+      });
+      if (reportError) throw reportError;
+    } catch (err) {
+      console.warn(
+        "doctor_reports insert failed. Run supabase-curable-schema.sql to enable report persistence.",
+        err,
+      );
+    }
 
-  const { data, error } = await client
-    .from("review_queue")
-    .insert({
-      patient_id: patientId,
-      summary: report.summary,
-      risk_level: report.risk,
-      ai_recommendation: detailLines.join("\n"),
-      status: "pending",
-    })
-    .select("id")
-    .single();
-
-  if (error) throw error;
-
-  try {
-    await client.from("doctor_reports").insert({
-      review_id: data?.id,
-      patient_id: patientId,
-      summary: report.summary,
-      risk_level: report.risk,
-      doctor_question: report.doctorQuestion,
-      patient_context: report.patientContext || [],
-      medication_context: report.medicationContext || [],
-      memory_context: report.memoryContext || [],
-      recent_conversation: report.recentConversation || [],
-      ai_safety_note: report.aiSafetyNote || null,
-      status: "sent",
-    });
-  } catch (err) {
-    console.warn(
-      "doctor_reports insert failed. Run supabase-curable-schema.sql to enable report persistence.",
-      err,
-    );
-  }
-
-  return { id: data?.id };
-});
+    return { id: data?.id };
+  });
