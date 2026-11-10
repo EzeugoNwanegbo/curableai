@@ -229,10 +229,10 @@ function ProfilePage() {
         <Section title="Basic profile">
           <dl className="space-y-3 text-sm">
             <Row k="Name" v={patient.name} />
-            <Row k="Age" v={`${patient.age}`} />
-            <Row k="Sex" v={patient.sex} />
+            <Row k="Age" v={patient.age ? `${patient.age}` : "Not recorded"} />
+            <Row k="Sex" v={patient.sex || "Not recorded"} />
             {occupation ? <Row k="Occupation" v={occupation} /> : null}
-            <Row k="Blood group" v={patient.bloodGroup} />
+            <Row k="Blood group" v={patient.bloodGroup || "Not recorded"} />
             {genotype ? <Row k="Genotype" v={genotype} /> : null}
           </dl>
         </Section>
@@ -250,7 +250,7 @@ function ProfilePage() {
                 </li>
               ))
             ) : (
-              <li className="text-sm text-muted-foreground italic">No known allergies.</li>
+              <li className="text-sm text-muted-foreground italic">No allergies recorded.</li>
             )}
           </ul>
         </Section>
@@ -267,7 +267,7 @@ function ProfilePage() {
                 </li>
               ))
             ) : (
-              <li className="text-sm text-muted-foreground italic">No known conditions.</li>
+              <li className="text-sm text-muted-foreground italic">No conditions recorded.</li>
             )}
           </ul>
         </Section>

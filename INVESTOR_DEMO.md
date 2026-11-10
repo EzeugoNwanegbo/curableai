@@ -2,7 +2,7 @@
 
 Use Node.js 22.16 or newer. Run `npm ci`, then `npm run dev`. The server loads `.env.local`; this file is ignored by Git and contains the locally approved OpenAI key and public Supabase configuration. Never put the OpenAI key in a `VITE_` variable.
 
-The public homepage offers the fictional, scripted demo. **Sign in to Curable** opens the connected application. Student accounts use Supabase authentication and saved conversations; approved doctor accounts use a separate review workspace.
+The public homepage opens the real account and chat flow. **Explore the investor demo** opens the separate fictional, scripted demo at `/?demo=true`. Student accounts use Supabase authentication and saved conversations; approved doctor accounts use a separate review workspace.
 
 1. Sign in as a student and open **Health records**.
 2. Choose **Add fictional clinic record**. The sample is stored as a labelled memory entry, separate from the student's actual profile. Repeating the import updates that entry rather than duplicating it. It can be removed using the profile's existing memory controls.
@@ -21,3 +21,5 @@ No real Veritas EMR is connected. The `ClinicRecord` type provides a consistent 
 `npm run typecheck` and `npm run build` check the application. `tests/review-flow.sql` exercises confirmation enforcement, atomic and repeated doctor acceptance, message persistence and cross-student isolation inside a rolled-back database transaction. `supabase-review-flow.sql` records the additional schema and access changes already applied to the connected project.
 
 Live OpenAI authentication and a minimal generated response were verified. Full sign-in, email confirmation, Google OAuth and the complete two-account browser walkthrough still require user-controlled student and approved doctor accounts.
+
+Additional browser verification: a fictional student signed in, received a live AI response, reloaded saved conversation history, imported a labelled sample record, and signed out. Test data was isolated from real users.

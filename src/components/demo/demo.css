@@ -1229,3 +1229,89 @@
     padding: 0;
   }
 }
+.cd-welcome-nav {
+  max-width: 1100px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 30px;
+}
+.cd-welcome-nav > a:last-child {
+  color: #cfb5f4;
+  font-size: 13px;
+  text-decoration: none;
+}
+.cd-welcome-main {
+  max-width: 1040px;
+  margin: auto;
+  padding: 30px;
+}
+.cd-welcome-main .cd-hero {
+  background: radial-gradient(ellipse at 100% 50%, #a854a31c, transparent 70%), #171425;
+}
+.cd-welcome-main .cd-hero-copy {
+  padding: 60px;
+}
+.cd-welcome-main h1 {
+  font-size: 64px;
+  line-height: 1.12;
+  letter-spacing: -3px;
+  margin: 28px 0;
+}
+.cd-welcome-main h1 em {
+  font-style: normal;
+  color: #eba2d2;
+}
+.cd-welcome-main .cd-hero-copy > p {
+  font-size: 14px;
+  max-width: 550px;
+}
+.cd-welcome-actions {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  margin: 28px 0;
+}
+.cd-welcome-actions > a {
+  text-decoration: none;
+  color: #d1b5f5;
+}
+.cd-welcome-actions > .cd-primary {
+  color: #170f27;
+  font-size: 13px !important;
+}
+.cd-welcome-main .cd-prompt-grid {
+  margin-top: 40px;
+}
+.cd-welcome-main .cd-prompt {
+  text-decoration: none;
+}
+.cd-welcome-main .cd-prompt h2 {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+.cd-welcome-main .cd-footer a {
+  color: #bc9bdf;
+  font-size: 10px;
+}
+@media (max-width: 700px) {
+  .cd-welcome-nav {
+    padding: 22px;
+  }
+  .cd-welcome-main {
+    padding: 12px 20px;
+  }
+  .cd-welcome-main .cd-hero-copy {
+    padding: 32px 24px;
+  }
+  .cd-welcome-main h1 {
+    font-size: 43px;
+    letter-spacing: -2px;
+  }
+  .cd-welcome-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+}

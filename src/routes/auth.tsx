@@ -5,7 +5,8 @@ import { useAuth, type UserRole } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string; mode?: "signup" } => ({
+    mode: search.mode === "signup" ? "signup" : undefined,
     redirect:
       typeof search.redirect === "string" &&
       /^\/(?![\\/])/.test(search.redirect) &&
@@ -31,9 +32,11 @@ function readListField(value: string) {
 
 function AuthPage() {
   const navigate = useNavigate();
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => setClientReady(true), []);
   const auth = useAuth();
-  const { redirect } = Route.useSearch();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { redirect, mode: initialMode } = Route.useSearch();
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode || "signin");
   const [role, setRole] = useState<UserRole>("patient");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -116,23 +119,12 @@ function AuthPage() {
         throw new Error("Full name is required.");
       }
 
-      if (mode === "signup" && role === "patient") {
-        if (!age || age < 1) throw new Error("Add your age.");
-        if (!sex) throw new Error("Select your sex.");
-        if (!location) throw new Error("Add your location.");
-        if (!occupation) throw new Error("Add your occupation.");
-        if (!bloodGroup) throw new Error("Select your blood group.");
-        if (!genotype) throw new Error("Select your genotype.");
-        if (!averageWaterDaily) throw new Error("Select your average daily water intake.");
-        if (!exerciseFrequency) throw new Error("Select how often you exercise.");
-      }
-
       if (mode === "signup") {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth`,
+            emailRedirectTo: `${window.location.origin}/auth${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""}`,
             data: {
               role,
               full_name: fullName,
@@ -258,14 +250,14 @@ function AuthPage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {mode === "signin"
                   ? "Use your Curable account details."
-                  : "Doctor access requires approval before the doctor dashboard is available."}
+                  : "Start with your name, email and password. You can add health information later."}
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => void handleGoogleAuth()}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !clientReady}
               className="mt-5 inline-flex w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
             >
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-card text-xs font-bold text-foreground">
@@ -348,10 +340,10 @@ function AuthPage() {
               </label>
 
               {mode === "signup" && role === "patient" ? (
-                <div className="rounded-md border border-border bg-surface p-4">
-                  <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Quick health card
-                  </div>
+                <details className="rounded-md border border-border bg-surface p-4">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                    Optional health details — add now or later
+                  </summary>
                   <div className="mt-3 grid gap-4 sm:grid-cols-2">
                     <label className="text-sm">
                       <span className="text-xs font-medium text-muted-foreground">Age</span>
@@ -487,9 +479,10 @@ function AuthPage() {
                     </label>
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    Medications can be skipped now and added later from the medication area.
+                    These details are optional. You can update your profile and medicines after
+                    signing in.
                   </p>
-                </div>
+                </details>
               ) : null}
             </div>
 
@@ -517,7 +510,7 @@ function AuthPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !clientReady}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-accent disabled:opacity-60"
             >
               {isSubmitting ? (

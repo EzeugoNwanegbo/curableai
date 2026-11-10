@@ -136,9 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      queueMicrotask(() => {
+      window.setTimeout(() => {
         if (active) void applySession(nextSession);
-      });
+      }, 0);
     });
     return () => {
       active = false;
