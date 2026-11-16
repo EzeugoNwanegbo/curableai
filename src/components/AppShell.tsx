@@ -51,10 +51,15 @@ export function AppShell() {
             Student health<small>{doctor ? "Doctor workspace" : "Your personal space"}</small>
           </div>
         </div>
-        <p className="cd-nav-label">YOUR SPACE</p>
-        <nav>
+        <p className="cd-nav-label">Your space</p>
+        <nav aria-label="Main navigation">
           {nav.map(([to, label]) => (
-            <Link className={location.pathname === to ? "active" : ""} to={to} key={to}>
+            <Link
+              className={location.pathname === to ? "active" : ""}
+              aria-current={location.pathname === to ? "page" : undefined}
+              to={to}
+              key={to}
+            >
               {label}
             </Link>
           ))}
@@ -73,8 +78,8 @@ export function AppShell() {
       </aside>
       <div className="cd-body">
         <header className="cd-topbar">
-          <span>CURABLE</span>
-          <span>Your health. Your choice.</span>
+          <span>Student health</span>
+          <span>Your health, in context</span>
         </header>
         <Outlet />
       </div>

@@ -11,7 +11,8 @@
     "start": "node --env-file-if-exists=.env.local .output/server/index.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:privacy": "node --experimental-strip-types --test tests/ai-privacy*.test.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

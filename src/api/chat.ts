@@ -3,6 +3,13 @@ import { z } from "zod";
 import { readDoctorConnection } from "@/api/doctor-connection";
 import { fetchMedicationsForPatient } from "@/api/medications";
 import {
+  AI_PRIVACY_VERSION,
+  createPrivacyFilter,
+  isIdentityMemory,
+  memoryIdentityHints,
+} from "@/lib/ai-privacy";
+import { logAiFailure, requestPrivateCompletion } from "@/lib/ai-provider";
+import {
   buildPatientState,
   runDifferentialEngine,
   type DifferentialResult,
@@ -19,6 +26,39 @@ const DEEPSEEK_MODEL = "deepseek-chat";
 
 const structuredFallbackSafetyNote =
   "OpenAI and DeepSeek were both unavailable, so Curable created this structured report from saved profile, medications, memory, and recent messages.";
+
+async function patientPrivacyFilter(client: any, patient: any, medicines: any[], memories: any[]) {
+  const [
+    {
+      data: { user },
+      error,
+    },
+    doctor,
+  ] = await Promise.all([client.auth.getUser(), readDoctorConnection(client, patient.id)]);
+  if (error || !user) throw new Error("Please sign in before preparing private AI context.");
+  const hints = memoryIdentityHints(memories);
+  return createPrivacyFilter({
+    names: [
+      patient.full_name,
+      user.user_metadata?.full_name,
+      user.user_metadata?.name,
+      doctor?.doctorName,
+      ...medicines.map((m) => m.prescriber),
+      ...(hints.names || []),
+    ],
+    identifiers: [
+      patient.id,
+      user.id,
+      user.email,
+      user.phone,
+      doctor?.doctorEmail,
+      user.user_metadata?.student_number,
+      user.user_metadata?.matric_number,
+      ...(hints.identifiers || []),
+    ],
+    locations: [doctor?.clinicName, ...(hints.locations || [])],
+  });
+}
 
 const conditionLabels = [
   "Strong pattern match",
@@ -793,17 +833,19 @@ export const sendMessage = createServerFn({ method: "POST" })
 
     // 2. Format Context for AI
     const patientMedications = await fetchMedicationsForPatient(patientId);
+    const privacy = await patientPrivacyFilter(client, patient, patientMedications, memory || []);
     const medicationContext = patientMedications
       .map((m) => {
         const sideEffects = m.sideEffects.length
           ? `; reported side effects: ${m.sideEffects.join(", ")}`
           : "";
-        return `- ${m.name} ${m.dosage}, ${m.frequency} at ${m.time}; purpose: ${m.purpose}; source: ${m.source}; adherence: ${Math.round(m.adherence * 100)}%; prescriber: ${m.prescriber}${sideEffects}`;
+        return `- ${m.name} ${m.dosage}, ${m.frequency} at ${m.time}; purpose: ${m.purpose}; source: ${m.source}; adherence: ${Math.round(m.adherence * 100)}%${sideEffects}`;
       })
       .join("\n");
 
     const memoryContext = memory?.length
       ? memory
+          .filter((m) => !isIdentityMemory(m.label))
           .map(
             (m) =>
               `- [L${m.layer}: ${memoryLayerNames[m.layer] || "Memory"}] ${m.label}: ${m.details}`,
@@ -822,7 +864,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     const today = new Date().toISOString().slice(0, 10);
     const contextStr = `
 Today's date: ${today}
-Patient: ${patient.full_name} (${patient.age}y, ${patient.sex})
+Patient: ${patient.age || "Age not recorded"}${patient.age ? "y" : ""}, ${patient.sex || "Sex not recorded"}
 Known Conditions: ${patient.conditions?.join(", ") || "None"}
 Allergies: ${patient.allergies?.join(", ") || "None"}
 Doctor's Note: ${patient.pinned_by_doctor || "None"}
@@ -903,33 +945,27 @@ Example:
     ];
 
     try {
-      const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || "gpt-4o",
-        messages: chatMessages,
-      });
-
-      fullContent = response.choices[0].message.content || "";
-    } catch (openAiErr) {
+      fullContent = await requestPrivateCompletion(
+        openai,
+        process.env.OPENAI_MODEL || "gpt-4o",
+        chatMessages,
+        privacy,
+      );
+    } catch {
+      logAiFailure("openai", "chat");
       if (deepseek) {
         try {
-          const response = await deepseek.chat.completions.create({
-            model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
-            messages: chatMessages,
-          });
-
-          fullContent = response.choices[0].message.content || "";
-        } catch (deepseekErr) {
-          console.warn("OpenAI and DeepSeek chat unavailable; using local Curable fallback.", {
-            openAiErr,
-            deepseekErr,
-          });
+          fullContent = await requestPrivateCompletion(
+            deepseek,
+            process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
+            chatMessages,
+            privacy,
+          );
+        } catch {
+          logAiFailure("deepseek", "chat");
           fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
         }
       } else {
-        console.warn(
-          "OpenAI chat unavailable and no DeepSeek key is configured; using local Curable fallback.",
-          openAiErr,
-        );
         fullContent = buildFallbackTaggedResponse(message, patient, patientMedications);
       }
     }
@@ -972,7 +1008,14 @@ Example:
         patient_id: patientId,
         role: "ai",
         content: cleanContent,
-        metadata: { signals, escalation, reasoning, original_content: fullContent, conversationId },
+        metadata: {
+          signals,
+          escalation,
+          reasoning,
+          original_content: fullContent,
+          conversationId,
+          privacy: { version: AI_PRIVACY_VERSION, externalRequestsFiltered: true },
+        },
       })
       .select()
       .single();
@@ -1071,6 +1114,7 @@ export const createDoctorReviewReport = createServerFn({ method: "POST" })
     if (!patient) throw new Error("Patient not found");
 
     const patientMedications = await fetchMedicationsForPatient(patientId);
+    const privacy = await patientPrivacyFilter(client, patient, patientMedications, memory || []);
     const medicationContext = patientMedications
       .map(
         (m) =>
@@ -1079,7 +1123,10 @@ export const createDoctorReviewReport = createServerFn({ method: "POST" })
       .join("\n");
 
     const memoryContext = memory?.length
-      ? memory.map((m) => `[L${m.layer}] ${m.label}: ${m.details}`).join("\n")
+      ? memory
+          .filter((m) => !isIdentityMemory(m.label))
+          .map((m) => `[L${m.layer}] ${m.label}: ${m.details}`)
+          .join("\n")
       : "No saved memory facts yet.";
 
     const recentConversation = recentMessages?.length
@@ -1126,7 +1173,7 @@ Return only valid JSON with these keys:
         content: `Reason for doctor review: ${reason}
 
 Patient:
-${patient.full_name}, ${patient.age}y, ${patient.sex}
+${patient.age || "Age not recorded"}${patient.age ? "y" : ""}, ${patient.sex || "Sex not recorded"}
 Conditions: ${patient.conditions?.join(", ") || "None"}
 Allergies: ${patient.allergies?.join(", ") || "None"}
 Doctor pinned note: ${patient.pinned_by_doctor || "None"}
@@ -1147,31 +1194,28 @@ ${reasoningContext}`,
 
     let report;
     try {
-      const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || "gpt-4o",
-        messages: reportMessages,
-      });
-
-      const raw = response.choices[0].message.content || "{}";
+      const raw =
+        (await requestPrivateCompletion(
+          openai,
+          process.env.OPENAI_MODEL || "gpt-4o",
+          reportMessages,
+          privacy,
+        )) || "{}";
       report = normalizeDoctorReport(parseReportJson(raw), reason, latestReasoningSnapshot);
-    } catch (openAiErr) {
+    } catch {
+      logAiFailure("openai", "report");
       if (deepseek) {
         try {
-          const response = await deepseek.chat.completions.create({
-            model: process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
-            messages: reportMessages,
-          });
-
-          const raw = response.choices[0].message.content || "{}";
+          const raw =
+            (await requestPrivateCompletion(
+              deepseek,
+              process.env.DEEPSEEK_MODEL || DEEPSEEK_MODEL,
+              reportMessages,
+              privacy,
+            )) || "{}";
           report = normalizeDoctorReport(parseReportJson(raw), reason, latestReasoningSnapshot);
-        } catch (deepseekErr) {
-          console.warn(
-            "OpenAI and DeepSeek report generation unavailable; using structured fallback report.",
-            {
-              openAiErr,
-              deepseekErr,
-            },
-          );
+        } catch {
+          logAiFailure("deepseek", "report");
           report = buildFallbackReport(
             reason,
             patient,
@@ -1182,10 +1226,6 @@ ${reasoningContext}`,
           );
         }
       } else {
-        console.warn(
-          "OpenAI report generation unavailable and no DeepSeek key is configured; using structured fallback report.",
-          openAiErr,
-        );
         report = buildFallbackReport(
           reason,
           patient,

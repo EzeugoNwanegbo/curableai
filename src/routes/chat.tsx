@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Send,
-  Sparkles,
   ShieldAlert,
   BookmarkCheck,
   Loader2,
@@ -28,6 +27,7 @@ import {
 } from "@/api/chat";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { quickRepliesFor } from "@/lib/quick-replies";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
@@ -185,6 +185,8 @@ function ChatPage() {
   );
   const [doctorConnection, setDoctorConnection] = useState<DoctorConnection | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const sendingRef = useRef(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [isCreatingReport, setIsCreatingReport] = useState(false);
   const [isSendingReport, setIsSendingReport] = useState(false);
   const [doctorReport, setDoctorReport] = useState<DoctorReport | null>(null);
@@ -193,7 +195,7 @@ function ChatPage() {
   const [reportError, setReportError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedReasoningId, setExpandedReasoningId] = useState<string | null>(null);
-  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const initializedPatientRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const chatStateQuery = useQuery({
@@ -247,8 +249,7 @@ function ChatPage() {
 
   useEffect(() => {
     if (!patientId) return;
-    if (chatStateQuery.error) {
-      console.error("Initialization error:", chatStateQuery.error);
+    if (chatStateQuery.error && !chatStateQuery.data) {
       setError(chatStateQuery.error.message || "An unexpected error occurred.");
       return;
     }
@@ -273,9 +274,12 @@ function ChatPage() {
     if (state.messages) {
       const mappedMessages = state.messages.map(mapDbMessage);
       setAllMessages(mappedMessages);
-      setActiveConversationId(
-        mappedMessages[mappedMessages.length - 1]?.conversationId || "current",
-      );
+      if (initializedPatientRef.current !== patientId) {
+        setActiveConversationId(
+          mappedMessages[mappedMessages.length - 1]?.conversationId || "current",
+        );
+        initializedPatientRef.current = patientId;
+      }
     }
 
     setDoctorConnection(state.doctorConnection || null);
@@ -331,20 +335,23 @@ function ChatPage() {
   }, [isSending, messages]);
 
   const handleNewChat = () => {
+    if (sendingRef.current) return;
     setActiveConversationId(`chat_${Date.now()}`);
     setInput("");
     setExpandedReasoningId(null);
     setDoctorReport(null);
+    setSendError(null);
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !patient || isSending) return;
+  const sendText = async (text: string) => {
+    if (!text.trim() || !patient || sendingRef.current) return;
+    sendingRef.current = true;
+    setSendError(null);
 
     const userMsg: Message = {
       id: Math.random().toString(),
       role: "patient",
-      text: input,
+      text,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       createdAt: new Date().toISOString(),
       conversationId: activeConversationId,
@@ -359,7 +366,7 @@ function ChatPage() {
       const aiResponse = await sendMessage({
         data: {
           patientId: patient.id,
-          message: input,
+          message: text,
           conversationId: activeConversationId,
         },
       });
@@ -368,7 +375,7 @@ function ChatPage() {
       const aiMessage = {
         id: aiMessageId,
         role: "ai" as const,
-        text: "",
+        text: aiResponse.content,
         time: aiResponse.time,
         createdAt: new Date().toISOString(),
         conversationId: activeConversationId,
@@ -382,56 +389,21 @@ function ChatPage() {
       };
 
       setAllMessages((prev) => [...prev, aiMessage]);
-      setTypingMessageId(aiMessageId);
 
-      const words = String(aiResponse.content || "").split(/(\s+)/);
-      let rendered = "";
-      for (const word of words) {
-        rendered += word;
-        setAllMessages((prev) =>
-          prev.map((message) =>
-            message.id === aiMessageId ? { ...message, text: rendered } : message,
-          ),
-        );
-        await new Promise((resolve) => setTimeout(resolve, word.trim() ? 28 : 8));
-      }
-      setTypingMessageId(null);
-
-      setAllMessages((prev) =>
-        prev.map((message) =>
-          message.id === aiMessageId
-            ? {
-                ...message,
-                text: aiResponse.content,
-              }
-            : message,
-        ),
-      );
-
-      const freshState = await getPatientChatState({ data: { patientId: patient.id } });
-      queryClient.setQueryData(["patient-chat-state", patient.id], freshState);
-      setDoctorConnection(freshState.doctorConnection || null);
-
-      if (freshState.memories) {
-        setMemories(
-          freshState.memories.map((m) => ({
-            id: m.id,
-            label: m.label,
-            layer: m.layer,
-            details: m.details,
-            since: new Date(m.created_at).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            }),
-          })),
-        );
-      }
-    } catch (err) {
-      console.error("Chat error:", err);
-      setTypingMessageId(null);
+      // The reply succeeded. A background refresh must not invite a duplicate send.
+      void queryClient.invalidateQueries({ queryKey: ["patient-chat-state", patient.id] });
+    } catch {
+      setInput(text);
+      setSendError("We couldn’t finish that reply. Your text is here so you can try again.");
     } finally {
       setIsSending(false);
+      sendingRef.current = false;
     }
+  };
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    void sendText(input);
   };
 
   const handleCreateReport = async () => {
@@ -457,7 +429,7 @@ function ChatPage() {
       setReportConfirmed(false);
       setDoctorReport(report as DoctorReport);
     } catch (err: any) {
-      setError(err.message || "Could not create doctor report.");
+      setReportError(err.message || "Could not create doctor report.");
     } finally {
       setIsCreatingReport(false);
     }
@@ -482,7 +454,7 @@ function ChatPage() {
       });
       setReportSent(true);
     } catch (err: any) {
-      setError(err.message || "Could not send report to doctor.");
+      setReportError(err.message || "Could not send report to doctor.");
     } finally {
       setIsSendingReport(false);
     }
@@ -510,14 +482,21 @@ function ChatPage() {
     pinned: "",
   };
   const isChatPreparing = chatStateQuery.isLoading && !patient;
+  const lastMessage = messages[messages.length - 1];
+  const quickReplies =
+    lastMessage?.role === "ai" && !isSending
+      ? quickRepliesFor(lastMessage.reasoning?.nextQuestion)
+      : [];
 
   return (
     <div
-      className={`grid min-h-[calc(100vh-3.5rem)] grid-cols-1 lg:min-h-screen ${
-        isHistoryOpen ? "lg:grid-cols-[240px_1fr]" : "lg:grid-cols-[72px_1fr]"
+      className={`curable-chat grid min-h-0 grid-cols-1 ${
+        isHistoryOpen ? "lg:grid-cols-[240px_1fr]" : "lg:grid-cols-1"
       }`}
     >
-      <aside className="hidden border-r border-border bg-card/60 p-3 lg:block">
+      <aside
+        className={`${isHistoryOpen ? "lg:block" : ""} hidden border-r border-border bg-card/60 p-4`}
+      >
         <div
           className={
             isHistoryOpen
@@ -563,6 +542,7 @@ function ChatPage() {
                 <button
                   key={chat.id}
                   type="button"
+                  disabled={isSending}
                   onClick={() => setActiveConversationId(chat.id)}
                   className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
                     chat.id === activeConversationId
@@ -586,48 +566,62 @@ function ChatPage() {
       </aside>
 
       {/* Conversation */}
-      <div className="flex h-[calc(100vh-3.5rem)] flex-col border-r border-border lg:h-screen">
-        <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-5">
-          <div className="hidden lg:block">
-            <h1 className="font-serif text-xl text-foreground">Curable · {displayPatient.name}</h1>
+      <div className="curable-chat-thread flex min-h-0 min-w-0 flex-col">
+        <header className="curable-chat-header flex flex-wrap items-center justify-between gap-4 border-b border-border px-4 py-4 sm:px-8">
+          <div>
+            <h1 className="text-lg font-medium text-foreground">Ask Curable</h1>
+            <p className="mt-1 text-xs text-muted-foreground">
+              One conversation, with your health in context
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsHistoryOpen((value) => !value)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background lg:hidden"
-            aria-label="Open chat history"
-          >
-            <History className="h-4 w-4 text-primary" />
-          </button>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-4">
             <button
               type="button"
-              onClick={() => setIsMobileContextOpen((value) => !value)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary"
+              onClick={() => setIsHistoryOpen((value) => !value)}
+              className="text-sm text-muted-foreground hover:text-foreground"
+              aria-expanded={isHistoryOpen}
+              aria-label="Toggle chat history"
             >
-              <BarChart3 className="h-3.5 w-3.5" /> Possible cases
+              History
             </button>
-            {doctorConnection?.doctorName ? (
-              <span className="hidden items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success lg:inline-flex">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" />{" "}
-                {doctorConnection.doctorName} selected for optional review
-              </span>
-            ) : null}
-            {doctorConnection?.doctorName ? (
+            <button
+              type="button"
+              onClick={handleNewChat}
+              disabled={isSending}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              New chat
+            </button>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={handleCreateReport}
-                disabled={isCreatingReport}
-                className="hidden items-center gap-1.5 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10 lg:inline-flex"
+                onClick={() => setIsMobileContextOpen((value) => !value)}
+                aria-expanded={isMobileContextOpen}
+                className="text-sm text-muted-foreground hover:text-foreground"
               >
-                {isCreatingReport ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5" />
-                )}
-                {isCreatingReport ? "Preparing report" : "Request doctor review"}
+                Context used
               </button>
-            ) : null}
+              {doctorConnection?.doctorName ? (
+                <span className="sr-only">
+                  {doctorConnection.doctorName} selected for optional review
+                </span>
+              ) : null}
+              {doctorConnection?.doctorName ? (
+                <button
+                  type="button"
+                  onClick={handleCreateReport}
+                  disabled={isCreatingReport}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                >
+                  {isCreatingReport ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5" />
+                  )}
+                  {isCreatingReport ? "Preparing report" : "Request doctor review"}
+                </button>
+              ) : null}
+            </div>
           </div>
         </header>
 
@@ -657,6 +651,7 @@ function ChatPage() {
                 <button
                   key={chat.id}
                   type="button"
+                  disabled={isSending}
                   onClick={() => setActiveConversationId(chat.id)}
                   className={`rounded-md border px-3 py-2 text-left ${
                     chat.id === activeConversationId
@@ -703,9 +698,33 @@ function ChatPage() {
 
         <div
           ref={scrollRef}
-          className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
+          className="curable-chat-messages flex-1 space-y-8 overflow-y-auto px-4 py-8 sm:px-8"
         >
           {isChatPreparing ? <ChatLoadingSkeleton /> : null}
+
+          {!isChatPreparing && messages.length === 0 ? (
+            <div className="curable-chat-empty">
+              <span className="text-sm text-accent">Your health conversation</span>
+              <h2>What would you like help with?</h2>
+              <p>Start wherever feels easiest. Curable will ask one question at a time.</p>
+              <div className="curable-chat-starters">
+                {[
+                  "I want to discuss a symptom",
+                  "Help me understand a medicine",
+                  "I have a question about a clinic result",
+                ].map((text) => (
+                  <button
+                    key={text}
+                    type="button"
+                    disabled={!patient || isSending}
+                    onClick={() => setInput(text)}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {messages.map((m) => (
             <div key={m.id} className={m.role === "patient" ? "flex justify-end" : ""}>
@@ -715,33 +734,39 @@ function ChatPage() {
                 ) : (
                   <>
                     {m.role === "ai" && (
-                      <div className="mb-1.5 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-                        <Sparkles className="h-3 w-3 text-gold" /> Curable AI · {m.time}
+                      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        Curable <span aria-hidden="true">·</span> {m.time}
                       </div>
                     )}
                     <div
-                      className={`rounded-lg px-4 py-3 text-sm leading-relaxed ${
+                      className={`curable-message rounded-xl px-4 py-4 text-base leading-relaxed ${
                         m.role === "patient"
-                          ? "bg-primary text-primary-foreground"
-                          : "border border-border bg-card text-card-foreground"
+                          ? "bg-secondary text-secondary-foreground"
+                          : "text-foreground"
                       }`}
                     >
                       {m.text}
-                      {typingMessageId === m.id ? (
-                        <span className="ml-1 inline-block h-4 w-1 translate-y-0.5 animate-pulse rounded-full bg-primary align-baseline" />
-                      ) : null}
                     </div>
                     {m.actions?.length ? (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {m.actions.map((action) => (
-                          <span
-                            key={action}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-[11px] font-medium text-gold-foreground"
-                          >
-                            <Brain className="h-3 w-3" /> {action}
+                          <span key={action} className="text-xs text-muted-foreground">
+                            {action}
                           </span>
                         ))}
                       </div>
+                    ) : null}
+                    {m.role === "ai" && m.reasoning ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                        aria-expanded={expandedReasoningId === m.id}
+                        onClick={() =>
+                          setExpandedReasoningId((current) => (current === m.id ? null : m.id))
+                        }
+                      >
+                        Context used
+                      </button>
                     ) : null}
                     {m.reasoning && expandedReasoningId === m.id ? (
                       <ReasoningDetailCard
@@ -755,7 +780,7 @@ function ChatPage() {
             </div>
           ))}
 
-          {isSending && !typingMessageId && <TypingIndicator />}
+          {isSending && <TypingIndicator />}
 
           {reportError ? (
             <div className="rounded-md border border-gold/40 bg-gold/10 p-3 text-sm leading-relaxed text-foreground">
@@ -880,21 +905,48 @@ function ChatPage() {
         </div>
 
         <form
-          className="border-t border-border bg-card px-4 py-3 sm:px-6 lg:px-8 lg:py-4"
+          className="curable-composer border-t border-border px-4 py-4 sm:px-8"
           onSubmit={handleSend}
         >
-          <div className="flex items-center gap-3 rounded-lg border border-input bg-black/35 px-3 py-2 shadow-[inset_0_1px_0_rgba(234,223,198,0.04)] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
-            <input
+          {sendError ? (
+            <p role="alert" className="mb-3 text-sm text-destructive">
+              {sendError}
+            </p>
+          ) : null}
+          {quickReplies.length ? (
+            <div className="curable-quick-replies" aria-label="Suggested answers">
+              {quickReplies.map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  disabled={isSending || !patient}
+                  onClick={() => void sendText(reply)}
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex items-end gap-3 rounded-xl border border-input bg-card px-4 py-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe a symptom, ask a question…"
-              className="flex-1 bg-transparent text-[15px] font-medium leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  void sendText(input);
+                }
+              }}
+              rows={2}
+              aria-label="Your message to Curable"
+              placeholder="Tell Curable what’s on your mind"
+              className="min-w-0 flex-1 resize-none bg-transparent text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground"
               disabled={isSending || !patient}
             />
             <button
               type="submit"
-              disabled={isSending || !patient}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-accent disabled:opacity-50"
+              disabled={isSending || !patient || !input.trim()}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-50"
               aria-label="Send"
             >
               {isSending ? (
@@ -904,8 +956,9 @@ function ChatPage() {
               )}
             </button>
           </div>
-          <p className="mt-2 hidden text-[11px] text-muted-foreground sm:block">
-            Guided reasoning active · one question at a time · relevant details can become memory.
+          <p className="mt-3 text-xs text-muted-foreground">
+            Common identifying details are filtered before AI requests. Avoid sharing identifying
+            details.
           </p>
         </form>
       </div>
@@ -947,15 +1000,8 @@ function ChatLoadingSkeleton() {
 function TypingIndicator() {
   return (
     <div className="w-full">
-      <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-3 text-card-foreground">
-        <span className="sr-only">Assistant is preparing a response</span>
-        {[0, 1, 2].map((index) => (
-          <span
-            key={index}
-            className="h-2 w-2 animate-bounce rounded-full bg-primary"
-            style={{ animationDelay: `${index * 120}ms` }}
-          />
-        ))}
+      <div role="status" className="text-sm text-muted-foreground">
+        Curable is preparing a reply…
       </div>
     </div>
   );

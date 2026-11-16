@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import "./demo/demo.css";
 export function Welcome() {
   return (
-    <div className="cd">
+    <div className="cd cd-welcome">
       <header className="cd-welcome-nav">
         <Link className="cd-brand" to="/">
           curable<span>.</span>
@@ -12,13 +12,13 @@ export function Welcome() {
       <main className="cd-welcome-main">
         <section className="cd-hero">
           <div className="cd-hero-copy">
-            <span className="cd-pill">YOUR STUDENT HEALTH COMPANION</span>
+            <span className="cd-pill">For university students</span>
             <h1>
-              Your health.
+              Health questions,
               <br />
-              Less confusing.
+              with your history
               <br />
-              <em>More you.</em>
+              <em>in the picture.</em>
             </h1>
             <p>
               Ask about symptoms, understand medicines and make sense of clinic results. Keep your
@@ -33,7 +33,7 @@ export function Welcome() {
               </Link>
             </div>
             <p className="cd-small-note">
-              Private accounts · Saved conversations · Optional doctor review
+              Saved conversations and a doctor’s review when you choose
             </p>
           </div>
         </section>
@@ -42,7 +42,7 @@ export function Welcome() {
             [
               "/chat",
               "Ask a health question",
-              "A real conversation informed by the context you choose to save.",
+              "Discuss what’s bothering you, one question at a time.",
             ],
             [
               "/profile",

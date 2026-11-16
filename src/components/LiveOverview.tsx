@@ -2,14 +2,16 @@ import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import "./demo/demo.css";
 export function LiveOverview() {
-  const { displayName, role } = useAuth();
+  const { role } = useAuth();
   return (
     <div className="cd">
       <main className="cd-main">
         <div className="cd-page-heading">
           <div>
-            <p className="cd-eyebrow">YOUR HEALTH, UNDERSTOOD</p>
-            <h1>Hello, {displayName.split(" ")[0]}.</h1>
+            <p className="cd-eyebrow">
+              {role === "doctor" ? "School doctor workspace" : "Your personal space"}
+            </p>
+            <h1>{role === "doctor" ? "Student care" : "Your health"}</h1>
             <p>
               {role === "doctor"
                 ? "Review requests and continue care with your students."
@@ -19,13 +21,13 @@ export function LiveOverview() {
         </div>
         <section className="cd-hero">
           <div className="cd-hero-copy">
-            <span className="cd-pill">CURABLE · STUDENT HEALTH</span>
+            <span className="cd-pill">
+              {role === "doctor" ? "Continue care" : "A place to start"}
+            </span>
             <h2>
-              Your health.
+              {role === "doctor" ? "The student’s story," : "What’s bothering you,"}
               <br />
-              Less confusing.
-              <br />
-              <em>More you.</em>
+              <em>with the history</em>
             </h2>
             <p>
               {role === "doctor"

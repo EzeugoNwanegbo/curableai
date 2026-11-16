@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import polishCss from "../curable-polish.css?url";
 import { AppShell } from "@/components/AppShell";
 import { AuthProvider } from "@/lib/auth";
 
@@ -41,7 +42,9 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="font-serif text-xl text-foreground">This page didn't load</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error instanceof Error ? error.message : "Please try again."}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {error instanceof Error ? error.message : "Please try again."}
+        </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -102,6 +105,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "stylesheet", href: polishCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
