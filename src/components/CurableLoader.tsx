@@ -1,20 +1,15 @@
-export function CurableLoader({ message = "Loading Curable..." }: { message?: string }) {
+export function CurableLoader({ message = "Getting your space ready…" }: { message?: string }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6">
-      <div className="flex flex-col items-center gap-5 text-center">
-        <div className="curable-loader" role="img" aria-label="Curable loading">
-          <svg
-            className="curable-loader__mark"
-            viewBox="0 0 96 96"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path className="curable-loader__track" d="M65 22a31 31 0 1 0 0 52" />
-            <path className="curable-loader__stroke" d="M65 22a31 31 0 1 0 0 52" />
-          </svg>
+    <main className="curable-loading-screen" aria-label="Loading Curable">
+      <div className="curable-loading-content">
+        <div className="curable-loading-brand" aria-hidden="true">
+          curable<span>.</span>
         </div>
-        <p className="text-sm font-semibold text-muted-foreground">{message}</p>
+        <div className="curable-loading-line" aria-hidden="true">
+          <span />
+        </div>
+        <p role="status">{message}</p>
       </div>
-    </div>
+    </main>
   );
 }

@@ -325,20 +325,6 @@
 .cd.cd-live-app .curable-message + div {
   box-shadow: none;
 }
-.curable-loader {
-  background: var(--card);
-  box-shadow: none;
-}
-.curable-loader::after {
-  border: 0;
-}
-.curable-loader__stroke {
-  stroke: var(--primary);
-  filter: none;
-  animation: none;
-  stroke-dashoffset: 0;
-}
-
 @media (max-width: 1150px) and (min-width: 801px) {
   .cd.cd-live-app .cd-sidebar {
     width: 228px;
