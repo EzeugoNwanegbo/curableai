@@ -600,12 +600,6 @@ function ChatPage() {
       {/* Conversation */}
       <div className="curable-chat-thread flex min-h-0 min-w-0 flex-col">
         <header className="curable-chat-header flex flex-wrap items-center justify-between gap-4 border-b border-border px-4 py-4 sm:px-8">
-          <div>
-            <h1 className="text-lg font-medium text-foreground">Ask Curable</h1>
-            <p className="mt-1 text-xs text-muted-foreground">
-              One conversation, with your health in context
-            </p>
-          </div>
           <div className="flex flex-wrap items-center gap-4">
             <button
               type="button"
