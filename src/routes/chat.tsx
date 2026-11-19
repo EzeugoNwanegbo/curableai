@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+import { useSideMenu } from "@/components/AppShell";
 import { addPatientMedication } from "@/api/medications";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,8 +19,6 @@ import {
   MessageSquare,
   BarChart3,
   ChevronDown,
-  History,
-  Plus,
 } from "lucide-react";
 import {
   createDoctorReviewReport,
@@ -173,13 +173,13 @@ function mapDbMessage(m: any): Message {
 }
 
 function ChatPage() {
+  const sideMenu = useSideMenu();
   const { patientId, displayName } = useAuth();
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("current");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isMobileContextOpen, setIsMobileContextOpen] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [patient, setPatient] = useState<{ id: string; name: string; pinned?: string } | null>(
     null,
@@ -521,95 +521,65 @@ function ChatPage() {
       : [];
 
   return (
-    <div
-      className={`curable-chat grid min-h-0 grid-cols-1 ${
-        isHistoryOpen ? "lg:grid-cols-[240px_1fr]" : "lg:grid-cols-1"
-      }`}
-    >
-      <aside
-        className={`${isHistoryOpen ? "lg:block" : ""} hidden border-r border-border bg-card/60 p-4`}
-      >
-        <div
-          className={
-            isHistoryOpen
-              ? "flex items-center justify-between gap-3"
-              : "flex flex-col items-center gap-3"
-          }
-        >
-          <button
-            type="button"
-            onClick={() => setIsHistoryOpen((value) => !value)}
-            className={`inline-flex items-center gap-2 text-sm font-semibold text-foreground ${
-              isHistoryOpen
-                ? ""
-                : "h-10 w-10 justify-center rounded-md border border-border bg-background"
-            }`}
-            aria-label={isHistoryOpen ? "Collapse chat history" : "Expand chat history"}
-          >
-            <History className="h-4 w-4 text-primary" />
-            {isHistoryOpen ? "Chat history" : null}
-          </button>
-          <button
-            type="button"
-            onClick={handleNewChat}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground"
-            aria-label="Start new chat"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-
-        {isHistoryOpen ? (
-          <div className="mt-4 space-y-2">
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className="flex w-full items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-primary/15"
-            >
-              <Plus className="h-4 w-4 text-primary" />
-              New symptom check
-            </button>
-            {chatHistory.length ? (
-              chatHistory.map((chat) => (
-                <button
-                  key={chat.id}
-                  type="button"
-                  disabled={isSending}
-                  onClick={() => setActiveConversationId(chat.id)}
-                  className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
-                    chat.id === activeConversationId
-                      ? "border-primary/40 bg-primary/10"
-                      : "border-border bg-background/60 hover:bg-muted"
-                  }`}
-                >
-                  <div className="truncate text-sm font-medium text-foreground">{chat.title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {chat.count} message{chat.count === 1 ? "" : "s"}
-                  </div>
-                </button>
-              ))
-            ) : (
-              <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No chat history yet.
-              </p>
-            )}
-          </div>
-        ) : null}
-      </aside>
+    <div className="curable-chat grid min-h-0 grid-cols-1">
+      {sideMenu.target
+        ? createPortal(
+            <section className="mt-5 border-t border-border pt-4" aria-label="Chat history">
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen((value) => !value)}
+                aria-expanded={isHistoryOpen}
+                aria-controls="chat-history-list"
+                className="flex min-h-11 w-full items-center justify-between text-sm text-foreground"
+              >
+                History
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${isHistoryOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {isHistoryOpen ? (
+                <div id="chat-history-list" className="space-y-1 pb-4">
+                  <button
+                    type="button"
+                    disabled={isSending}
+                    onClick={() => {
+                      handleNewChat();
+                      sideMenu.close();
+                    }}
+                    className="min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm text-primary hover:bg-muted"
+                  >
+                    New chat
+                  </button>
+                  {chatHistory.length ? (
+                    chatHistory.map((chat) => (
+                      <button
+                        key={chat.id}
+                        type="button"
+                        disabled={isSending}
+                        aria-current={chat.id === activeConversationId ? "true" : undefined}
+                        onClick={() => {
+                          setActiveConversationId(chat.id);
+                          sideMenu.close();
+                        }}
+                        className={`min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${chat.id === activeConversationId ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+                      >
+                        <span className="block truncate">{chat.title}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">No chat history yet.</p>
+                  )}
+                </div>
+              ) : null}
+            </section>,
+            sideMenu.target,
+          )
+        : null}
 
       {/* Conversation */}
       <div className="curable-chat-thread flex min-h-0 min-w-0 flex-col">
         <header className="curable-chat-header flex flex-wrap items-center justify-between gap-4 border-b border-border px-4 py-4 sm:px-8">
           <div className="flex flex-wrap items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setIsHistoryOpen((value) => !value)}
-              className="text-sm text-muted-foreground hover:text-foreground"
-              aria-expanded={isHistoryOpen}
-              aria-label="Toggle chat history"
-            >
-              History
-            </button>
             <button
               type="button"
               onClick={handleNewChat}
@@ -619,14 +589,6 @@ function ChatPage() {
               New chat
             </button>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsMobileContextOpen((value) => !value)}
-                aria-expanded={isMobileContextOpen}
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                Details
-              </button>
               {doctorConnection?.doctorName ? (
                 <span className="sr-only">
                   {doctorConnection.doctorName} selected for optional review
@@ -650,77 +612,6 @@ function ChatPage() {
             </div>
           </div>
         </header>
-
-        {isHistoryOpen ? (
-          <div className="border-b border-border bg-card/95 px-4 py-3 shadow-elegant lg:hidden">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm font-semibold text-foreground">Chat history</div>
-              <button
-                type="button"
-                onClick={() => setIsHistoryOpen(false)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground"
-                aria-label="Close chat history"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="grid max-h-56 gap-2 overflow-y-auto">
-              <button
-                type="button"
-                onClick={handleNewChat}
-                className="inline-flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-foreground"
-              >
-                <Plus className="h-4 w-4 text-primary" />
-                New chat
-              </button>
-              {chatHistory.map((chat) => (
-                <button
-                  key={chat.id}
-                  type="button"
-                  disabled={isSending}
-                  onClick={() => setActiveConversationId(chat.id)}
-                  className={`rounded-md border px-3 py-2 text-left ${
-                    chat.id === activeConversationId
-                      ? "border-primary/40 bg-primary/10"
-                      : "border-border bg-background/60"
-                  }`}
-                >
-                  <div className="truncate text-xs font-medium text-foreground">{chat.title}</div>
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">
-                    {chat.count} message{chat.count === 1 ? "" : "s"}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {isMobileContextOpen ? (
-          <div className="max-h-[45vh] overflow-y-auto border-b border-border bg-surface px-4 py-4">
-            <LiveReasoningPanel
-              reasoning={latestReasoningMessage?.reasoning || null}
-              isThinking={isSending}
-              onViewDetails={() => {
-                if (latestReasoningMessage?.id) setExpandedReasoningId(latestReasoningMessage.id);
-              }}
-            />
-            <div className="mt-4 rounded-lg border border-border bg-card p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Active context
-              </div>
-              <div className="mt-3 grid gap-2 text-xs">
-                <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2 text-foreground">
-                  <UserRound className="h-3.5 w-3.5 text-primary" />
-                  {displayPatient.name}
-                </div>
-                <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2 text-foreground">
-                  <Brain className="h-3.5 w-3.5 text-primary" />
-                  {memories.length} memory item{memories.length === 1 ? "" : "s"}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         <div
           ref={scrollRef}
@@ -783,24 +674,6 @@ function ChatPage() {
                           </span>
                         ))}
                       </div>
-                    ) : null}
-                    {m.role === "ai" && m.reasoning ? (
-                      <button
-                        type="button"
-                        className="mt-2 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                        aria-expanded={expandedReasoningId === m.id}
-                        onClick={() =>
-                          setExpandedReasoningId((current) => (current === m.id ? null : m.id))
-                        }
-                      >
-                        Details
-                      </button>
-                    ) : null}
-                    {m.reasoning && expandedReasoningId === m.id ? (
-                      <ReasoningDetailCard
-                        reasoning={m.reasoning}
-                        onClose={() => setExpandedReasoningId(null)}
-                      />
                     ) : null}
                   </>
                 )}
