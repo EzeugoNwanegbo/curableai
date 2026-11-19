@@ -13,6 +13,9 @@ const patientProfileSchema = z.object({
   averageWaterDaily: z.string().optional(),
   exerciseFrequency: z.string().optional(),
   exerciseType: z.string().optional(),
+  friedFoodFrequency: z.string().max(100).optional(),
+  produceFrequency: z.string().max(100).optional(),
+  mealFrequency: z.string().max(100).optional(),
   allergies: z.array(z.string()).optional(),
   conditions: z.array(z.string()).optional(),
 });
@@ -72,6 +75,9 @@ async function saveStructuredProfileMemory(
     averageWaterDaily?: string;
     exerciseFrequency?: string;
     exerciseType?: string;
+    fried_food_frequency?: string;
+    produce_frequency?: string;
+    meal_frequency?: string;
   },
 ) {
   await Promise.all([
@@ -86,6 +92,14 @@ async function saveStructuredProfileMemory(
     ),
     upsertProfileMemoryFact(client, patientId, "Exercise frequency", input.exerciseFrequency),
     upsertProfileMemoryFact(client, patientId, "Exercise type", input.exerciseType),
+    upsertProfileMemoryFact(client, patientId, "Fried food frequency", input.fried_food_frequency),
+    upsertProfileMemoryFact(
+      client,
+      patientId,
+      "Fruit and vegetable frequency",
+      input.produce_frequency,
+    ),
+    upsertProfileMemoryFact(client, patientId, "Meal frequency", input.meal_frequency),
   ]);
 }
 
@@ -170,6 +184,21 @@ export const ensurePatientAccount = createServerFn({ method: "POST" })
           averageWaterDaily,
           exerciseFrequency,
           exerciseType,
+          fried_food_frequency:
+            data.friedFoodFrequency ||
+            (typeof metadata.fried_food_frequency === "string"
+              ? metadata.fried_food_frequency.slice(0, 100)
+              : undefined),
+          produce_frequency:
+            data.produceFrequency ||
+            (typeof metadata.produce_frequency === "string"
+              ? metadata.produce_frequency.slice(0, 100)
+              : undefined),
+          meal_frequency:
+            data.mealFrequency ||
+            (typeof metadata.meal_frequency === "string"
+              ? metadata.meal_frequency.slice(0, 100)
+              : undefined),
         });
         return updated;
       }
@@ -181,6 +210,21 @@ export const ensurePatientAccount = createServerFn({ method: "POST" })
         averageWaterDaily,
         exerciseFrequency,
         exerciseType,
+        fried_food_frequency:
+          data.friedFoodFrequency ||
+          (typeof metadata.fried_food_frequency === "string"
+            ? metadata.fried_food_frequency.slice(0, 100)
+            : undefined),
+        produce_frequency:
+          data.produceFrequency ||
+          (typeof metadata.produce_frequency === "string"
+            ? metadata.produce_frequency.slice(0, 100)
+            : undefined),
+        meal_frequency:
+          data.mealFrequency ||
+          (typeof metadata.meal_frequency === "string"
+            ? metadata.meal_frequency.slice(0, 100)
+            : undefined),
       });
       return existing;
     }
@@ -211,6 +255,21 @@ export const ensurePatientAccount = createServerFn({ method: "POST" })
       averageWaterDaily,
       exerciseFrequency,
       exerciseType,
+      fried_food_frequency:
+        data.friedFoodFrequency ||
+        (typeof metadata.fried_food_frequency === "string"
+          ? metadata.fried_food_frequency.slice(0, 100)
+          : undefined),
+      produce_frequency:
+        data.produceFrequency ||
+        (typeof metadata.produce_frequency === "string"
+          ? metadata.produce_frequency.slice(0, 100)
+          : undefined),
+      meal_frequency:
+        data.mealFrequency ||
+        (typeof metadata.meal_frequency === "string"
+          ? metadata.meal_frequency.slice(0, 100)
+          : undefined),
     });
 
     return inserted;
@@ -247,6 +306,25 @@ export const getPatientProfileState = createServerFn({ method: "GET" })
       patient,
       memories: memories || [],
     };
+  });
+
+export const addPatientMemoryFact = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      label: z.string().trim().min(1).max(100),
+      details: z.string().trim().min(1).max(1000),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { getAuthenticatedClient } = await import("@/lib/supabase-server");
+    const client = await getAuthenticatedClient();
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser();
+    if (error || !user) throw new Error("Please sign in to continue.");
+    await upsertProfileMemoryFact(client, user.id, "Patient note: " + data.label, data.details);
+    return { saved: true };
   });
 
 export const updatePatientMemoryFact = createServerFn({ method: "POST" })

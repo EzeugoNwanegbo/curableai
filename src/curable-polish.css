@@ -401,3 +401,35 @@
     transition: none !important;
   }
 }
+
+.curable-menu-toggle {
+  display: none;
+}
+.curable-chat {
+  height: 100dvh;
+}
+@media (max-width: 800px) {
+  .cd.cd-live-app .curable-menu-toggle {
+    display: block;
+    min-height: 44px;
+    padding: 8px 20px;
+  }
+  .cd.cd-live-app .cd-sidebar {
+    display: none;
+  }
+  .cd.cd-live-app .cd-sidebar.is-open {
+    display: flex;
+    position: fixed;
+    inset: 44px auto 0 0;
+    z-index: 40;
+    width: min(280px, 90vw);
+    overflow-y: auto;
+  }
+  .cd.cd-live-app .cd-sidebar nav {
+    flex-direction: column;
+  }
+  .curable-chat {
+    height: calc(100dvh - 44px);
+    min-height: 0;
+  }
+}

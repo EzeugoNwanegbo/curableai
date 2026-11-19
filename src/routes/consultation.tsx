@@ -242,7 +242,10 @@ function ConsultationPage() {
   if (!consultation) {
     return (
       <div className="container-page py-10">
-        <h1 className="text-3xl">Doctor conversations</h1>
+        <h1 className="text-3xl">Doctors</h1>
+        <Link to="/apply-doctor" className="inline-flex min-h-11 items-center text-primary">
+          Apply as a doctor
+        </Link>
         <p className="mt-3 mb-8 text-sm text-muted-foreground">
           {role === "doctor"
             ? "Accept a confirmed student request from your review queue to begin a conversation."

@@ -17,6 +17,9 @@ interface RefreshPatientInput {
   averageWaterDaily?: string;
   exerciseFrequency?: string;
   exerciseType?: string;
+  friedFoodFrequency?: string;
+  produceFrequency?: string;
+  mealFrequency?: string;
   allergies?: string[];
   conditions?: string[];
 }
@@ -84,6 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         averageWaterDaily: profile?.averageWaterDaily,
         exerciseFrequency: profile?.exerciseFrequency,
         exerciseType: profile?.exerciseType,
+        friedFoodFrequency: profile?.friedFoodFrequency,
+        produceFrequency: profile?.produceFrequency,
+        mealFrequency: profile?.mealFrequency,
         allergies: profile?.allergies,
         conditions: profile?.conditions,
       },
@@ -112,11 +118,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!active || current !== revision.current) return;
           const verifiedSession = { ...nextSession, user: data.user };
           setSession(verifiedSession);
-          if (data.user.user_metadata?.role === "doctor" && getUserRole(data.user) !== "doctor") {
-            throw new Error(
-              "Your doctor account is awaiting approval. Contact the Curable administrator.",
-            );
-          }
           await ensurePatient(verifiedSession, undefined, current);
         }
       } catch (error) {

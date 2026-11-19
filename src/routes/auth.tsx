@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, LogIn, Stethoscope, UserRound } from "lucide-react";
-import { useAuth, type UserRole } from "@/lib/auth";
+import { Loader2, LogIn } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { addPatientMedication, getAuthenticatedPatientMedications } from "@/api/medications";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth")({
@@ -30,25 +31,279 @@ function readListField(value: string) {
     .filter((item) => item && !/^(none|no|n\/a|na)$/i.test(item));
 }
 
+const habitQuestions = [
+  [
+    "exerciseFrequency",
+    "On a typical week, how many days do you move fast enough to breathe harder, like a brisk walk or dancing?",
+    ["0 days", "1–2 days", "3–4 days", "5–7 days"],
+  ],
+  [
+    "averageWaterDaily",
+    "How much plain water do you usually drink in a day?",
+    ["Less than 1 litre", "1 to under 2 litres", "2 to under 3 litres", "3 litres or more"],
+  ],
+  [
+    "mealFrequency",
+    "How many meals do you usually eat in a day?",
+    ["0–1 meals", "2 meals", "3 meals", "4 or more meals", "It varies"],
+  ],
+  [
+    "produceFrequency",
+    "How often do you usually eat fruit or vegetables?",
+    ["Less than weekly", "A few days a week", "Once a day", "More than once a day"],
+  ],
+  [
+    "friedFoodFrequency",
+    "How often do you usually eat fried foods?",
+    ["Less than weekly", "1–2 days a week", "3–4 days a week", "5–7 days a week"],
+  ],
+] as const;
+
+function DailyHabits() {
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const question = habitQuestions[step];
+  const answered = habitQuestions.filter(
+    ([name]) => answers[name] && answers[name] !== "Not sure",
+  ).length;
+  function advance(value: string) {
+    if (!question) return;
+    const [name] = question;
+    setAnswers((previous) => ({ ...previous, [name]: value }));
+    setStep(step + 1);
+  }
+  return (
+    <section className="space-y-3 rounded-lg border border-border p-4">
+      {habitQuestions.map(([name]) => (
+        <input key={name} type="hidden" name={name} value={answers[name] ?? ""} />
+      ))}
+      <h2 className="font-medium">Daily habits</h2>
+      <p className="text-sm text-muted-foreground">
+        {answered} answered · {habitQuestions.length - step} left
+      </p>
+      <progress
+        className="w-full accent-primary"
+        value={step}
+        max={habitQuestions.length}
+        aria-label="Daily habits progress"
+      />
+      {question && (
+        <fieldset className="space-y-3">
+          <legend className="mb-2 text-sm">{question[1]}</legend>
+          <div className="flex flex-wrap gap-2">
+            {[...question[2], "Not sure", "Skip"].map((option) => (
+              <button
+                key={option}
+                type="button"
+                className="min-h-11 rounded-lg border border-input px-3 text-sm"
+                onClick={() => advance(option === "Skip" ? "" : option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      {step > 0 && (
+        <button
+          type="button"
+          className="min-h-11 text-sm underline"
+          onClick={() => setStep(step - 1)}
+        >
+          Previous question
+        </button>
+      )}
+    </section>
+  );
+}
+
+function HealthSetup({ onComplete }: { onComplete: () => void }) {
+  const auth = useAuth();
+  const [step, setStep] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pages = ["About you", "Health history", "Medicines and herbs", "Daily habits"];
+  const fieldClass = "mt-1 w-full rounded-lg border border-input bg-background p-3";
+  async function finish(form: HTMLFormElement) {
+    if (!auth.patientId || busy) return;
+    setBusy(true);
+    setError("");
+    const values = new FormData(form);
+    const read = (key: string) => String(values.get(key) ?? "").trim();
+    try {
+      await auth.refreshPatient({
+        age: read("age") ? Number(read("age")) : undefined,
+        sex: read("sex"),
+        conditions: readListField(read("conditions")),
+        allergies: readListField(read("allergies")),
+        exerciseFrequency: read("exerciseFrequency"),
+        averageWaterDaily: read("averageWaterDaily"),
+        mealFrequency: read("mealFrequency"),
+        produceFrequency: read("produceFrequency"),
+        friedFoodFrequency: read("friedFoodFrequency"),
+      });
+      const patientId = auth.patientId;
+      const names = new Map(
+        readListField(read("medications")).map((name) => [name.toLowerCase(), name]),
+      );
+      if (names.size) {
+        const existing = await getAuthenticatedPatientMedications({ data: { patientId } });
+        for (const item of existing) names.delete(item.name.toLowerCase());
+        for (const name of names.values())
+          await addPatientMedication({ data: { patientId, name } });
+      }
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: { health_setup_pending: false },
+      });
+      if (updateError) throw updateError;
+      onComplete();
+    } catch (failure) {
+      setError(
+        failure instanceof Error ? failure.message : "Could not save your setup. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="mx-auto max-w-lg px-5 py-10">
+      <h1 className="text-2xl font-medium">Help Curable get to know you</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Share what you know. You can leave any answer blank.
+      </p>
+      <p className="mt-5 text-sm">
+        Step {step + 1} of {pages.length} · {pages[step]}
+      </p>
+      <progress
+        className="w-full accent-primary"
+        aria-label="Health setup progress"
+        value={step + 1}
+        max={pages.length}
+      />
+      <form
+        className="mt-5 space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (step < pages.length - 1) setStep(step + 1);
+          else void finish(event.currentTarget);
+        }}
+      >
+        <div hidden={step !== 0} className="space-y-4">
+          <label className="block">
+            Age
+            <input className={fieldClass} name="age" type="number" min="1" max="120" />
+          </label>
+          <label className="block">
+            Sex
+            <select className={fieldClass} name="sex" defaultValue="">
+              <option value="">Skip</option>
+              <option>Female</option>
+              <option>Male</option>
+              <option>Other</option>
+            </select>
+          </label>
+        </div>
+        <div hidden={step !== 1} className="space-y-4">
+          <label className="block">
+            Known conditions
+            <input
+              className={fieldClass}
+              name="conditions"
+              maxLength={400}
+              placeholder="For example, asthma"
+            />
+          </label>
+          <label className="block">
+            Allergies
+            <input
+              className={fieldClass}
+              name="allergies"
+              maxLength={400}
+              placeholder="For example, penicillin"
+            />
+          </label>
+        </div>
+        <div hidden={step !== 2}>
+          <label className="block">
+            What medicines or herbal remedies do you take regularly?
+            <input
+              className={fieldClass}
+              name="medications"
+              maxLength={400}
+              placeholder="Names separated by commas"
+            />
+          </label>
+        </div>
+        <div hidden={step !== 3}>
+          <DailyHabits />
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <div className="flex gap-3">
+          {step > 0 && (
+            <button
+              type="button"
+              disabled={busy}
+              className="min-h-11 px-3"
+              onClick={() => setStep(step - 1)}
+            >
+              Back
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={busy || !auth.patientId}
+            className="min-h-11 rounded-lg bg-primary px-4 text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? "Saving…" : step === pages.length - 1 ? "Finish setup" : "Continue"}
+          </button>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void auth.signOut()}
+          className="text-sm underline"
+        >
+          Sign out
+        </button>
+      </form>
+    </main>
+  );
+}
+
 function AuthPage() {
   const navigate = useNavigate();
   const [clientReady, setClientReady] = useState(false);
   useEffect(() => setClientReady(true), []);
   const auth = useAuth();
   const { redirect, mode: initialMode } = Route.useSearch();
+  const needsSetup =
+    auth.role === "patient" && auth.user?.user_metadata?.health_setup_pending === true;
+  const [setupDone, setSetupDone] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">(initialMode || "signin");
-  const [role, setRole] = useState<UserRole>("patient");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth.session || auth.isLoading || auth.authError) return;
+    if (!auth.session || auth.isLoading || auth.authError || (needsSetup && !setupDone)) return;
     void navigate({
       to: redirect || (auth.role === "doctor" ? "/doctor" : "/chat"),
       replace: true,
     });
-  }, [auth.isLoading, auth.role, auth.session, auth.authError, navigate, redirect]);
+  }, [
+    auth.isLoading,
+    auth.role,
+    auth.session,
+    auth.authError,
+    navigate,
+    redirect,
+    needsSetup,
+    setupDone,
+  ]);
 
   const handleGoogleAuth = async () => {
     setIsSubmitting(true);
@@ -90,18 +345,6 @@ function AuthPage() {
     const email = readField("email");
     const password = (fields.namedItem("password") as HTMLInputElement)?.value || "";
     const fullName = readField("fullName");
-    const age = Number(readField("age") || 0);
-    const sex = readField("sex");
-    const bloodGroup = readField("bloodGroup");
-    const genotype = readField("genotype");
-    const occupation = readField("occupation");
-    const location = readField("location");
-    const averageWaterDaily = readField("averageWaterDaily");
-    const exerciseFrequency = readField("exerciseFrequency");
-    const exerciseType = readField("exerciseType");
-    const allergies = readListField(readField("allergies"));
-    const conditions = readListField(readField("conditions"));
-
     setIsSubmitting(true);
     setError(null);
     setNotice(null);
@@ -126,19 +369,9 @@ function AuthPage() {
           options: {
             emailRedirectTo: `${window.location.origin}/auth${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""}`,
             data: {
-              role,
+              role: "patient",
               full_name: fullName,
-              age,
-              sex,
-              blood_group: bloodGroup,
-              genotype,
-              occupation,
-              location,
-              average_water_daily: averageWaterDaily,
-              exercise_frequency: exerciseFrequency,
-              exercise_type: exerciseType,
-              allergies,
-              conditions,
+              health_setup_pending: true,
             },
           },
         });
@@ -167,55 +400,13 @@ function AuthPage() {
     }
   };
 
+  if (auth.session && needsSetup && !setupDone) {
+    return <HealthSetup onComplete={() => setSetupDone(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto grid min-h-screen max-w-6xl lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="flex flex-col justify-between border-r border-border bg-surface px-8 py-8">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-lg font-extrabold text-primary-foreground">
-                C
-              </div>
-              <div>
-                <div className="font-serif text-xl text-foreground">Curable</div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  Continuity of Care
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-20">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Real accounts
-              </div>
-              <h1 className="mt-3 font-serif text-4xl leading-tight text-foreground">
-                Patient memory and doctor review under one identity.
-              </h1>
-              <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-                Patients get continuous AI context. Doctors get a structured review queue and
-                consultation workspace.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-10 grid gap-3 text-sm">
-            <div className="rounded-md border border-border bg-card p-4">
-              <UserRound className="h-4 w-4 text-primary" />
-              <div className="mt-2 font-medium text-foreground">Patient account</div>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Chat, profile, medications, memory, reports, and consultation access.
-              </p>
-            </div>
-            <div className="rounded-md border border-border bg-card p-4">
-              <Stethoscope className="h-4 w-4 text-primary" />
-              <div className="mt-2 font-medium text-foreground">Doctor account</div>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Review AI reports, validate guidance, and start doctor-patient chats.
-              </p>
-            </div>
-          </div>
-        </section>
-
+      <div className="mx-auto grid min-h-screen max-w-lg items-center">
         <main className="flex items-center justify-center px-6 py-10">
           <form
             noValidate
@@ -243,17 +434,6 @@ function AuthPage() {
               </button>
             </div>
 
-            <div className="mt-6">
-              <h2 className="font-serif text-2xl text-foreground">
-                {mode === "signin" ? "Welcome back" : "Create your workspace"}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {mode === "signin"
-                  ? "Use your Curable account details."
-                  : "Start with your name, email and password. You can add health information later."}
-              </p>
-            </div>
-
             <button
               type="button"
               onClick={() => void handleGoogleAuth()}
@@ -274,35 +454,6 @@ function AuthPage() {
               <span className="h-px flex-1 bg-border" />
             </div>
 
-            {mode === "signup" ? (
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole("patient")}
-                  className={`rounded-md border px-3 py-3 text-left text-sm ${
-                    role === "patient"
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-foreground"
-                  }`}
-                >
-                  <UserRound className="h-4 w-4" />
-                  <span className="mt-2 block font-medium">Patient</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole("doctor")}
-                  className={`rounded-md border px-3 py-3 text-left text-sm ${
-                    role === "doctor"
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-foreground"
-                  }`}
-                >
-                  <Stethoscope className="h-4 w-4" />
-                  <span className="mt-2 block font-medium">Doctor</span>
-                </button>
-              </div>
-            ) : null}
-
             <div className="mt-5 grid gap-4">
               {mode === "signup" ? (
                 <label className="text-sm">
@@ -310,7 +461,7 @@ function AuthPage() {
                   <input
                     name="fullName"
                     required
-                    placeholder={role === "doctor" ? "Doctor name" : "Your full name"}
+                    placeholder="Your full name"
                     className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
                   />
                 </label>
@@ -338,152 +489,6 @@ function AuthPage() {
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
                 />
               </label>
-
-              {mode === "signup" && role === "patient" ? (
-                <details className="rounded-md border border-border bg-surface p-4">
-                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                    Optional health details — add now or later
-                  </summary>
-                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                    <label className="text-sm">
-                      <span className="text-xs font-medium text-muted-foreground">Age</span>
-                      <input
-                        name="age"
-                        type="number"
-                        min="1"
-                        placeholder="24"
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      />
-                    </label>
-                    <label className="text-sm">
-                      <span className="text-xs font-medium text-muted-foreground">Sex</span>
-                      <select
-                        name="sex"
-                        defaultValue=""
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      >
-                        <option value="">Select</option>
-                        <option value="Female">Female</option>
-                        <option value="Male">Male</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </label>
-                    <label className="text-sm sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">Location</span>
-                      <input
-                        name="location"
-                        placeholder="City, state, or country"
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      />
-                    </label>
-                    <label className="text-sm sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">Occupation</span>
-                      <input
-                        name="occupation"
-                        placeholder="Your occupation"
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      />
-                    </label>
-                    <label className="text-sm">
-                      <span className="text-xs font-medium text-muted-foreground">Blood group</span>
-                      <select
-                        name="bloodGroup"
-                        defaultValue=""
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      >
-                        <option value="">Select</option>
-                        {["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-", "Unknown"].map(
-                          (group) => (
-                            <option key={group} value={group}>
-                              {group === "Unknown" ? "I don't know yet" : group}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </label>
-                    <label className="text-sm">
-                      <span className="text-xs font-medium text-muted-foreground">Genotype</span>
-                      <select
-                        name="genotype"
-                        defaultValue=""
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      >
-                        <option value="">Select</option>
-                        {["AA", "AS", "SS", "AC", "SC", "Unknown"].map((type) => (
-                          <option key={type} value={type}>
-                            {type === "Unknown" ? "I don't know yet" : type}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-sm">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Water per day
-                      </span>
-                      <select
-                        name="averageWaterDaily"
-                        defaultValue=""
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      >
-                        <option value="">Select</option>
-                        <option value="Less than 1 liter">Less than 1 liter</option>
-                        <option value="1-2 liters">1-2 liters</option>
-                        <option value="2-3 liters">2-3 liters</option>
-                        <option value="More than 3 liters">More than 3 liters</option>
-                        <option value="Not sure">Not sure</option>
-                      </select>
-                    </label>
-                    <label className="text-sm">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Exercise per week
-                      </span>
-                      <select
-                        name="exerciseFrequency"
-                        defaultValue=""
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      >
-                        <option value="">Select</option>
-                        <option value="0 times per week">0 times</option>
-                        <option value="1-2 times per week">1-2 times</option>
-                        <option value="3-4 times per week">3-4 times</option>
-                        <option value="5 or more times per week">5+ times</option>
-                      </select>
-                    </label>
-                    <label className="text-sm sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Exercise type
-                      </span>
-                      <input
-                        name="exerciseType"
-                        placeholder="Walking, gym, football, none, etc."
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      />
-                    </label>
-                    <label className="text-sm sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">Allergies</span>
-                      <input
-                        name="allergies"
-                        placeholder="Penicillin, peanuts, dust, or none"
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      />
-                    </label>
-                    <label className="text-sm sm:col-span-2">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Known conditions
-                      </span>
-                      <input
-                        name="conditions"
-                        placeholder="Asthma, hypertension, diabetes, or none"
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                      />
-                    </label>
-                  </div>
-                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    These details are optional. You can update your profile and medicines after
-                    signing in.
-                  </p>
-                </details>
-              ) : null}
             </div>
 
             {error || auth.authError ? (

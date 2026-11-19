@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Link, Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { CurableLoader } from "@/components/CurableLoader";
 import "./demo/demo.css";
 export function AppShell() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   const auth = useAuth();
   const publicPage = location.pathname === "/" || location.pathname === "/auth";
@@ -20,29 +22,42 @@ export function AppShell() {
         <button onClick={() => void auth.signOut()}>Sign out</button>
       </div>
     );
+  if (
+    auth.session &&
+    auth.role === "patient" &&
+    auth.user?.user_metadata?.health_setup_pending === true
+  )
+    return <Navigate to="/auth" replace />;
   const doctor = auth.role === "doctor";
   if (
     (doctor &&
       ["/chat", "/profile", "/medications", "/notifications"].includes(location.pathname)) ||
     (!doctor && location.pathname === "/doctor")
   )
-    return <Navigate to="/" replace />;
+    return <Navigate to={doctor ? "/doctor" : "/chat"} replace />;
   const nav = doctor
     ? [
-        ["/", "Overview"],
         ["/doctor", "Review requests"],
         ["/consultation", "Conversations"],
       ]
     : [
-        ["/", "Overview"],
-        ["/chat", "Ask Curable"],
-        ["/profile", "Health records"],
-        ["/medications", "Medicines"],
-        ["/consultation", "Doctor conversations"],
+        ["/chat", "Curable AI"],
+        ["/profile", "Health record"],
+        ["/medications", "Medication"],
+        ["/consultation", "Doctors"],
       ];
   return (
     <div className="cd cd-live-app">
-      <aside className="cd-sidebar">
+      <button
+        type="button"
+        className="curable-menu-toggle"
+        aria-expanded={menuOpen}
+        aria-controls="curable-menu"
+        onClick={() => setMenuOpen(!menuOpen)}
+      >
+        {menuOpen ? "Close menu" : "Menu"}
+      </button>
+      <aside id="curable-menu" className={`cd-sidebar ${menuOpen ? "is-open" : ""}`}>
         <Link className="cd-brand" to="/">
           curable<span className="cd-brand-dot">.</span>
         </Link>
@@ -53,10 +68,16 @@ export function AppShell() {
         </div>
         <p className="cd-nav-label">Your space</p>
         <nav aria-label="Main navigation">
+          {auth.user?.app_metadata?.curable_admin === true && (
+            <Link to="/admin" onClick={() => setMenuOpen(false)}>
+              Admin
+            </Link>
+          )}
           {nav.map(([to, label]) => (
             <Link
               className={location.pathname === to ? "active" : ""}
               aria-current={location.pathname === to ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
               to={to}
               key={to}
             >
@@ -77,10 +98,6 @@ export function AppShell() {
         </div>
       </aside>
       <div className="cd-body">
-        <header className="cd-topbar">
-          <span>Student health</span>
-          <span>Your health, in context</span>
-        </header>
         <Outlet />
       </div>
     </div>

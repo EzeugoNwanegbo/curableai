@@ -1,6 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { Welcome } from "@/components/Welcome";
-import { LiveOverview } from "@/components/LiveOverview";
 import { useAuth } from "@/lib/auth";
 import { CurableDemo } from "@/components/demo/CurableDemo";
 import { VisitPrep } from "@/components/VisitPrep";
@@ -14,7 +13,8 @@ export const Route = createFileRoute("/")({
       { title: "Curable · Your health, understood" },
       {
         name: "description",
-        content: "Prepare a note with your symptoms, medicines and questions for your next clinic visit.",
+        content:
+          "Prepare a note with your symptoms, medicines and questions for your next clinic visit.",
       },
     ],
   }),
@@ -22,8 +22,14 @@ export const Route = createFileRoute("/")({
 });
 
 function Overview() {
-  const { session } = useAuth();
+  const { session, role } = useAuth();
   const { demo, prep } = Route.useSearch();
   if (prep) return <VisitPrep />;
-  return demo ? <CurableDemo /> : session ? <LiveOverview /> : <Welcome />;
+  return demo ? (
+    <CurableDemo />
+  ) : session ? (
+    <Navigate to={role === "doctor" ? "/doctor" : "/chat"} replace />
+  ) : (
+    <Welcome />
+  );
 }

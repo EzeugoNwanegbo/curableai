@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Pin, ShieldAlert, Brain, Pencil, Trash2, Save, X } from "lucide-react";
 import { CurableLoader } from "@/components/CurableLoader";
 import {
+  addPatientMemoryFact,
   deletePatientMemoryFact,
   getPatientProfileState,
   updatePatientMemoryFact,
@@ -55,6 +56,9 @@ function ProfilePage() {
   const { patientId, displayName } = useAuth();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [newFact, setNewFact] = useState({ label: "", details: "" });
+  const [addingFact, setAddingFact] = useState(false);
+  const [factNotice, setFactNotice] = useState("");
   const [editingMemory, setEditingMemory] = useState<string | null>(null);
   const [draftMemory, setDraftMemory] = useState({ label: "", details: "" });
   const [loadingSample, setLoadingSample] = useState(false);
@@ -187,7 +191,7 @@ function ProfilePage() {
   return (
     <div className="container-page py-10">
       <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Page 04</div>
-      <h1 className="mt-1 font-serif text-3xl text-foreground">Patient Health Profile</h1>
+      <h1 className="mt-1 font-serif text-3xl text-foreground">Health record</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         The persistent medical identity. Every AI response retrieves from here before responding.
       </p>
@@ -284,153 +288,181 @@ function ProfilePage() {
         </div>
 
         <div className="lg:col-span-3">
-          <Section title="Longitudinal timeline">
-            <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {memories.length > 0 ? (
-                memories
-                  .filter((m) => m.layer === 3 || m.layer === 2) // Episodic or Behavioral
-                  .map((t, i) => (
-                    <li key={i} className="rounded border border-border bg-surface p-4">
-                      <div className="font-mono text-[10px] uppercase tracking-wider text-gold-foreground/70">
-                        {t.since}
-                      </div>
-                      <div className="mt-1 text-sm font-medium text-foreground">{t.label}</div>
-                      <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        {t.details}
-                      </div>
-                    </li>
-                  ))
-              ) : (
-                <li className="lg:col-span-4 rounded border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                  No timeline events recorded yet. Memory accumulates during AI chat.
-                </li>
+          <details className="rounded-xl border border-border bg-card p-5">
+            <summary className="cursor-pointer font-medium">
+              Update or correct what Curable remembers
+            </summary>
+            <form
+              className="mt-4 space-y-2"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (addingFact) return;
+                setAddingFact(true);
+                setFactNotice("");
+                try {
+                  await addPatientMemoryFact({ data: newFact });
+                  setNewFact({ label: "", details: "" });
+                  await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: ["patient-profile", patientId] }),
+                    queryClient.invalidateQueries({ queryKey: ["patient-chat-state", patientId] }),
+                  ]);
+                  setFactNotice("Saved.");
+                } catch {
+                  setFactNotice("Could not save this detail. Try again.");
+                } finally {
+                  setAddingFact(false);
+                }
+              }}
+            >
+              <label className="block text-sm">
+                What should Curable remember?
+                <input
+                  required
+                  maxLength={100}
+                  className="mt-1 block w-full rounded border border-input bg-background p-2"
+                  placeholder="For example, exercise routine"
+                  value={newFact.label}
+                  onChange={(event) => setNewFact({ ...newFact, label: event.currentTarget.value })}
+                />
+              </label>
+              <label className="block text-sm">
+                Detail
+                <input
+                  required
+                  maxLength={1000}
+                  className="mt-1 block w-full rounded border border-input bg-background p-2"
+                  value={newFact.details}
+                  onChange={(event) =>
+                    setNewFact({ ...newFact, details: event.currentTarget.value })
+                  }
+                />
+              </label>
+              <button type="submit" className="min-h-11 text-primary" disabled={addingFact}>
+                Save detail
+              </button>
+              {factNotice && (
+                <p role="status" className="text-sm">
+                  {factNotice}
+                </p>
               )}
-            </ol>
-          </Section>
-        </div>
-
-        <div className="lg:col-span-3">
-          <Section title="AI memory facts">
-            <div className="mb-4 flex items-start gap-3 rounded-md border border-border bg-surface p-4">
-              <Brain className="mt-0.5 h-4 w-4 text-primary" />
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Curable saves important facts from AI conversations here automatically. You can edit
-                anything that is incomplete or remove facts that should not stay in your profile.
-              </p>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-3">
-              {[1, 2, 3].map((layer) => {
-                const layerMemories = memories.filter((m) => m.layer === layer);
-                return (
-                  <div key={layer} className="rounded-md border border-border bg-background p-4">
-                    <div className="mb-3">
-                      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Layer {layer}
+            </form>
+            <div className="mt-4">
+              <div className="grid gap-4 lg:grid-cols-3">
+                {[1, 2, 3].map((layer) => {
+                  const layerMemories = memories.filter((m) => m.layer === layer);
+                  return (
+                    <div key={layer} className="rounded-md border border-border bg-background p-4">
+                      <div className="mb-3">
+                        <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Layer {layer}
+                        </div>
+                        <h3 className="mt-1 font-serif text-base text-foreground">
+                          {layer === 1
+                            ? "Profile facts"
+                            : layer === 2
+                              ? "Patterns & medication signals"
+                              : "Recent events"}
+                        </h3>
                       </div>
-                      <h3 className="mt-1 font-serif text-base text-foreground">
-                        {layer === 1
-                          ? "Profile facts"
-                          : layer === 2
-                            ? "Patterns & medication signals"
-                            : "Recent events"}
-                      </h3>
-                    </div>
 
-                    <div className="space-y-3">
-                      {layerMemories.length ? (
-                        layerMemories.map((memory) => {
-                          const isEditing = editingMemory === memory.id;
-                          return (
-                            <article
-                              key={memory.id}
-                              className="rounded border border-border bg-card p-3"
-                            >
-                              {isEditing ? (
-                                <div className="space-y-2">
-                                  <input
-                                    value={draftMemory.label}
-                                    onChange={(e) =>
-                                      setDraftMemory((prev) => ({ ...prev, label: e.target.value }))
-                                    }
-                                    className="w-full rounded border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                                  />
-                                  <textarea
-                                    value={draftMemory.details}
-                                    onChange={(e) =>
-                                      setDraftMemory((prev) => ({
-                                        ...prev,
-                                        details: e.target.value,
-                                      }))
-                                    }
-                                    className="min-h-24 w-full rounded border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                                  />
-                                  <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => saveMemory(memory.id)}
-                                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-                                    >
-                                      <Save className="h-3 w-3" /> Save
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={cancelEdit}
-                                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
-                                    >
-                                      <X className="h-3 w-3" /> Cancel
-                                    </button>
+                      <div className="space-y-3">
+                        {layerMemories.length ? (
+                          layerMemories.map((memory) => {
+                            const isEditing = editingMemory === memory.id;
+                            return (
+                              <article
+                                key={memory.id}
+                                className="rounded border border-border bg-card p-3"
+                              >
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <input
+                                      value={draftMemory.label}
+                                      onChange={(e) =>
+                                        setDraftMemory((prev) => ({
+                                          ...prev,
+                                          label: e.target.value,
+                                        }))
+                                      }
+                                      className="w-full rounded border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                                    />
+                                    <textarea
+                                      value={draftMemory.details}
+                                      onChange={(e) =>
+                                        setDraftMemory((prev) => ({
+                                          ...prev,
+                                          details: e.target.value,
+                                        }))
+                                      }
+                                      className="min-h-24 w-full rounded border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                                    />
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => saveMemory(memory.id)}
+                                        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+                                      >
+                                        <Save className="h-3 w-3" /> Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={cancelEdit}
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
+                                      >
+                                        <X className="h-3 w-3" /> Cancel
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <h4 className="text-sm font-medium text-foreground">
-                                        {memory.label}
-                                      </h4>
-                                      <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                                        Saved {memory.since}
+                                ) : (
+                                  <>
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <h4 className="text-sm font-medium text-foreground">
+                                          {memory.label}
+                                        </h4>
+                                        <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                                          Saved {memory.since}
+                                        </div>
+                                      </div>
+                                      <div className="flex shrink-0 gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => startEdit(memory)}
+                                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                                          aria-label={`Edit ${memory.label}`}
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => deleteMemory(memory.id)}
+                                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-destructive/30 text-destructive hover:bg-destructive/10"
+                                          aria-label={`Delete ${memory.label}`}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
                                       </div>
                                     </div>
-                                    <div className="flex shrink-0 gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => startEdit(memory)}
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                                        aria-label={`Edit ${memory.label}`}
-                                      >
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => deleteMemory(memory.id)}
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-destructive/30 text-destructive hover:bg-destructive/10"
-                                        aria-label={`Delete ${memory.label}`}
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                                    {memory.details}
-                                  </p>
-                                </>
-                              )}
-                            </article>
-                          );
-                        })
-                      ) : (
-                        <div className="rounded border border-dashed border-border p-4 text-sm text-muted-foreground">
-                          No facts saved in this layer yet.
-                        </div>
-                      )}
+                                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                      {memory.details}
+                                    </p>
+                                  </>
+                                )}
+                              </article>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded border border-dashed border-border p-4 text-sm text-muted-foreground">
+                            No facts saved in this layer yet.
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </Section>
+          </details>
         </div>
       </div>
     </div>

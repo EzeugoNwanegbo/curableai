@@ -1,3 +1,4 @@
+import { addPatientMedication } from "@/api/medications";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -186,6 +187,9 @@ function ChatPage() {
   const [doctorConnection, setDoctorConnection] = useState<DoctorConnection | null>(null);
   const [isSending, setIsSending] = useState(false);
   const sendingRef = useRef(false);
+  const [medicineSuggestion, setMedicineSuggestion] = useState("");
+  const [savingMedicine, setSavingMedicine] = useState(false);
+  const [medicineNotice, setMedicineNotice] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [isCreatingReport, setIsCreatingReport] = useState(false);
   const [isSendingReport, setIsSendingReport] = useState(false);
@@ -343,10 +347,38 @@ function ChatPage() {
     setSendError(null);
   };
 
+  async function saveSuggestedMedicine() {
+    if (!patient || !medicineSuggestion.trim() || savingMedicine) return;
+    setSavingMedicine(true);
+    setMedicineNotice("");
+    try {
+      await addPatientMedication({
+        data: { patientId: patient.id, name: medicineSuggestion.trim() },
+      });
+      setMedicineSuggestion("");
+      setMedicineNotice("Added to Medication.");
+      void queryClient.invalidateQueries({ queryKey: ["patient-medications", patient.id] });
+    } catch {
+      setMedicineNotice("Could not save the medicine. Try again.");
+    } finally {
+      setSavingMedicine(false);
+    }
+  }
+
   const sendText = async (text: string) => {
     if (!text.trim() || !patient || sendingRef.current) return;
     sendingRef.current = true;
     setSendError(null);
+    const reportedMedicine = text
+      .trim()
+      .match(
+        /^I (?:currently take|take|am taking|usually take) ([\p{L}][\p{L} '-]{1,59})(?: daily| every day)?[.!]?$/iu,
+      )?.[1]
+      ?.replace(/ (?:daily|every day)$/i, "");
+    if (reportedMedicine && !savingMedicine) {
+      setMedicineSuggestion(reportedMedicine);
+      setMedicineNotice("");
+    }
 
     const userMsg: Message = {
       id: Math.random().toString(),
@@ -599,7 +631,7 @@ function ChatPage() {
                 aria-expanded={isMobileContextOpen}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
-                Context used
+                Details
               </button>
               {doctorConnection?.doctorName ? (
                 <span className="sr-only">
@@ -704,9 +736,11 @@ function ChatPage() {
 
           {!isChatPreparing && messages.length === 0 ? (
             <div className="curable-chat-empty">
-              <span className="text-sm text-accent">Your health conversation</span>
-              <h2>What would you like help with?</h2>
-              <p>Start wherever feels easiest. Curable will ask one question at a time.</p>
+              <h2>What’s bothering you today?</h2>
+              <p>
+                Hi, I’m Curable, your AI health assistant. I can help you put what you’re feeling
+                into words and prepare a note for a doctor if you choose.
+              </p>
               <div className="curable-chat-starters">
                 {[
                   "I want to discuss a symptom",
@@ -765,7 +799,7 @@ function ChatPage() {
                           setExpandedReasoningId((current) => (current === m.id ? null : m.id))
                         }
                       >
-                        Context used
+                        Details
                       </button>
                     ) : null}
                     {m.reasoning && expandedReasoningId === m.id ? (
@@ -913,6 +947,46 @@ function ChatPage() {
               {sendError}
             </p>
           ) : null}
+          {(medicineSuggestion || medicineNotice) && (
+            <div className="mb-3 rounded-lg border border-border bg-card p-3 text-sm">
+              {medicineSuggestion && (
+                <>
+                  <label className="block">
+                    Add this to your medication list?
+                    <input
+                      className="mt-2 w-full rounded border border-input bg-background p-2"
+                      value={medicineSuggestion}
+                      maxLength={100}
+                      disabled={savingMedicine}
+                      onChange={(event) => setMedicineSuggestion(event.currentTarget.value)}
+                    />
+                  </label>
+                  <div className="mt-2 flex gap-4">
+                    <button
+                      type="button"
+                      disabled={savingMedicine || !medicineSuggestion.trim()}
+                      className="min-h-11 text-primary"
+                      onClick={() => void saveSuggestedMedicine()}
+                    >
+                      Add medicine
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingMedicine}
+                      className="min-h-11"
+                      onClick={() => {
+                        setMedicineSuggestion("");
+                        setMedicineNotice("");
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              )}
+              {medicineNotice && <p role="status">{medicineNotice}</p>}
+            </div>
+          )}
           {quickReplies.length ? (
             <div className="curable-quick-replies" aria-label="Suggested answers">
               {quickReplies.map((reply) => (
@@ -947,12 +1021,14 @@ function ChatPage() {
               type="submit"
               disabled={isSending || !patient || !input.trim()}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-50"
-              aria-label="Send"
+              aria-label="Send message"
             >
               {isSending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <span aria-hidden="true" className="font-bold">
+                  C
+                </span>
               )}
             </button>
           </div>
@@ -1266,7 +1342,7 @@ function ReasoningDetailCard({
 
         <div className="rounded-md border border-border bg-surface p-3">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Context used
+            Details
           </div>
           <ContextUsedList context={reasoning.usedContext} />
         </div>
