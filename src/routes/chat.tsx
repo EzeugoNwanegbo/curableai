@@ -51,7 +51,6 @@ interface Message {
   time: string;
   risk?: string;
   citations?: string[];
-  actions?: string[];
   doctorReview?: DoctorReviewUpdate;
   reasoning?: ReasoningSnapshot | null;
   conversationId?: string;
@@ -156,9 +155,6 @@ function mapDbMessage(m: any): Message {
     conversationId: metadata?.conversationId || "legacy",
     risk: metadata?.escalation?.risk,
     reasoning: metadata.reasoning || null,
-    actions: metadata?.signals?.length
-      ? [`${metadata.signals.length} memory fact${metadata.signals.length === 1 ? "" : "s"} saved`]
-      : undefined,
     doctorReview: isDoctorReview
       ? {
           outcome: metadata.outcome,
@@ -417,11 +413,6 @@ function ChatPage() {
         conversationId: activeConversationId,
         risk: aiResponse.risk,
         reasoning: aiResponse.reasoning as ReasoningSnapshot | null,
-        actions: aiResponse.memoriesAdded?.length
-          ? [
-              `${aiResponse.memoriesAdded.length} memory fact${aiResponse.memoriesAdded.length === 1 ? "" : "s"} saved to profile`,
-            ]
-          : undefined,
       };
 
       setAllMessages((prev) => [...prev, aiMessage]);
@@ -683,17 +674,11 @@ function ChatPage() {
                           : "text-foreground"
                       }`}
                     >
-                      {m.text}
+                      {m.role === "ai"
+                        ? m.text.replace(/\*\*([^\n]+?)\*\*/g, "$1")
+                        : m.text}
                     </div>
-                    {m.actions?.length ? (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {m.actions.map((action) => (
-                          <span key={action} className="text-xs text-muted-foreground">
-                            {action}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
+
                   </>
                 )}
               </div>
@@ -948,10 +933,6 @@ function ChatPage() {
               )}
             </button>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Common identifying details are filtered before AI requests. Avoid sharing identifying
-            details.
-          </p>
         </form>
       </div>
     </div>

@@ -452,3 +452,22 @@
   }
   .cd.cd-live-app .curable-menu-toggle { position: relative; z-index: 41; }
 }
+
+@media (max-width: 800px) {
+  .cd.cd-live-app:has(.curable-chat) .curable-menu-toggle {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 4rem;
+    height: 48px;
+    padding: 0 6px;
+    font-size: 14px;
+    line-height: 1.15;
+  }
+  .cd.cd-live-app:has(.curable-chat) .cd-sidebar.is-open { top: 48px; }
+  .cd.cd-live-app .curable-chat { height: 100dvh; }
+  .curable-chat-header {
+    padding: 2px 8px 2px 4.25rem;
+    min-height: 48px;
+  }
+  .curable-chat-header > div:last-child { gap: 8px; }
+}
