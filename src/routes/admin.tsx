@@ -17,7 +17,7 @@ interface Queues {
     workplace: string;
     status: string;
   }[];
-  requests: { id: string; patient_name: string; doctor_name: string | null; status: string }[];
+  requests: { id: string; patient_name: string; doctor_name: string | null; status: string; created_at: string }[];
 }
 
 function AdminPage() {
@@ -52,11 +52,12 @@ function AdminPage() {
             <h2 className="text-xl">Doctor applications</h2>
             {queues.data.applications.length === 0 && <p>No applications yet.</p>}
             {queues.data.applications.map((item) => (
-              <article
+              <details
                 key={item.user_id}
-                className="space-y-2 rounded-lg border border-border bg-card p-4"
+                className="rounded-lg border border-border bg-card"
               >
-                <h3 className="font-medium">{item.full_name}</h3>
+                <summary className="cursor-pointer p-4 font-medium">{item.full_name} · Application details</summary>
+                <div className="space-y-2 px-4 pb-4">
                 <p className="break-words text-sm">{item.email}</p>
                 <p className="text-sm">
                   {item.specialty || "Specialty pending"} · {item.workplace} · Registration {item.registration_number}
@@ -135,19 +136,23 @@ function AdminPage() {
                       </button>
                     </div>
                   ))}
-              </article>
+                </div>
+              </details>
             ))}
           </section>
           <section className="space-y-3">
             <h2 className="text-xl">Requests for a doctor</h2>
             {queues.data.requests.length === 0 && <p>No confirmed requests yet.</p>}
             {queues.data.requests.map((item) => (
-              <article key={item.id} className="rounded-lg border border-border bg-card p-4">
-                <h3 className="font-medium">{item.patient_name}</h3>
-                <p className="text-sm">
-                  {item.doctor_name ?? "No doctor listed"} · {item.status.replaceAll("_", " ")}
-                </p>
-              </article>
+              <details key={item.id} className="rounded-lg border border-border bg-card">
+                <summary className="cursor-pointer p-4 font-medium">{item.patient_name} · Request details</summary>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-4 pb-4 text-sm">
+                  <dt>Patient</dt><dd>{item.patient_name}</dd>
+                  <dt>Doctor</dt><dd>{item.doctor_name ?? "No doctor listed"}</dd>
+                  <dt>Status</dt><dd>{item.status.replaceAll("_", " ")}</dd>
+                  <dt>Requested</dt><dd>{new Date(item.created_at).toLocaleString()}</dd>
+                </dl>
+              </details>
             ))}
           </section>
         </>
