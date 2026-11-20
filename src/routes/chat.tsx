@@ -180,6 +180,7 @@ function ChatPage() {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [allMessages, setAllMessages] = useState<Message[]>([]);
+  const [continuedAt, setContinuedAt] = useState<string | null>(null);
   const [activeConversationId, setActiveConversationId] = useState("current");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -519,6 +520,15 @@ function ChatPage() {
   const lastMessage = messages[messages.length - 1];
   const previousMessage = messages[messages.length - 2];
   const requestedSummary = previousMessage?.role === "patient" && previousMessage.text === summaryRequest;
+  const isIntakeQuestion = (message: Message) =>
+    message.role === "ai" && !message.doctorReview &&
+    !message.reasoning?.stewardship?.shouldStopQuestioning &&
+    !message.reasoning?.stewardship?.shouldWarnUrgentCare &&
+    !["high", "urgent", "emergency"].includes(message.risk || "") &&
+    Boolean(message.reasoning?.nextQuestion || message.text.trim().endsWith("?"));
+  const showPaceCheck = !isSending && !requestedSummary && lastMessage &&
+    isIntakeQuestion(lastMessage) && lastMessage.id !== continuedAt &&
+    messages.filter(isIntakeQuestion).length === 4;
   const quickReplies =
     lastMessage?.role === "ai" && !isSending && !requestedSummary && !lastMessage.reasoning?.stewardship?.shouldStopQuestioning
       ? quickRepliesFor(lastMessage.reasoning?.nextQuestion)
@@ -610,9 +620,13 @@ function ChatPage() {
                   ) : (
                     <FileText className="h-3.5 w-3.5" />
                   )}
-                  {isCreatingReport ? "Preparing report" : "Request doctor review"}
+                  {isCreatingReport ? "Preparing your note…" : "Request doctor"}
                 </button>
-              ) : null}
+              ) : (
+                <Link to="/consultation" className="text-sm text-muted-foreground hover:text-foreground">
+                  Choose a doctor
+                </Link>
+              )}
             </div>
           </div>
         </header>
@@ -698,7 +712,7 @@ function ChatPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <FileText className="h-3 w-3 text-primary" /> Doctor report preview
+                    <FileText className="h-3 w-3 text-primary" /> Review your note
                   </div>
                   <h2 className="mt-1 font-serif text-lg text-foreground">
                     {doctorReport.doctorQuestion}
@@ -781,9 +795,10 @@ function ChatPage() {
                 </span>
               </label>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground">
-                  This sends the report to {doctorConnection?.doctorName || "your selected doctor"}.
-                  Doctor consultation will be a separate room.
+                <p role="status" className="text-xs text-muted-foreground">
+                  {reportSent
+                    ? `Your note was sent to ${doctorConnection?.doctorName || "your doctor"}. When they accept, you can talk in Doctors.`
+                    : "Read your note and change anything you want your doctor to understand."}
                 </p>
                 <button
                   type="button"
@@ -802,7 +817,7 @@ function ChatPage() {
                   ) : (
                     <Send className="h-4 w-4" />
                   )}
-                  {reportSent ? "Sent to doctor" : "Send to doctor"}
+                  {reportSent ? "Sent to doctor" : isSendingReport ? "Sending your note…" : "Send to doctor"}
                 </button>
               </div>
             </div>
@@ -858,7 +873,18 @@ function ChatPage() {
               {medicineNotice && <p role="status">{medicineNotice}</p>}
             </div>
           )}
-          {quickReplies.length ? (
+          {showPaceCheck ? (
+            <div>
+              <p className="mb-2 text-sm">Getting tired of the questions?</p>
+              <div className="curable-quick-replies">
+                <button type="button" onClick={() => setContinuedAt(lastMessage.id)}>Keep going</button>
+                <button type="button" disabled={!patient} onClick={() => void sendText(summaryRequest)}>
+                  Finish with a summary
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {!showPaceCheck && quickReplies.length ? (
             <div className="curable-quick-replies" aria-label="Suggested answers">
               {quickReplies.map((reply) => (
                 <button
@@ -872,7 +898,7 @@ function ChatPage() {
               ))}
             </div>
           ) : null}
-          {messages.some((message) => message.role === "patient") &&
+          {!showPaceCheck && messages.some((message) => message.role === "patient") &&
           lastMessage?.role === "ai" &&
           !requestedSummary &&
           !lastMessage.reasoning?.stewardship?.shouldStopQuestioning ? (

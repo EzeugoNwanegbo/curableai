@@ -20,6 +20,14 @@ There is no external AI request used to perform redaction. Original messages and
 
 Student-to-doctor messages stay direct and retain their authorized clinical context. If that content is later included in an AI prompt, it must enter through the same gateway. The application currently has no image/document upload path to this gateway; adding one requires its own local redaction and review.
 
+## Independent production launch
+
+Curable is launching independently. People can join directly. The release has no dependency on a school partnership, school email, campus clinic or school medical records. Doctor review is optional. Before offering it to users, recruit and verify participating doctors and agree when they will handle requests.
+
+The previous school pilot specified Nigeria-only processing. Confirm the independent service’s data-location policy before selecting production providers. Document where the app, identity records, clinical records, AI inference, backups and logs are processed, including fallback providers. Verify encryption in transit and at rest, restrict access to keys and identity records, and use fictional cases to inspect which clinical fields reach the model. Keep identifiers outside model inputs and minimize free text.
+
+Once there is enough information for review, offer a short handover. Request doctor opens an editable draft. The student chooses whether to send it. Only report submission or doctor acceptance after the corresponding action succeeds. Urgent guidance takes precedence over waiting for a reply.
+
 ## Verification
 
 Run `npm run test:privacy` and `node --test tests/quick-replies.test.mjs` with Node 22.22 or later. Privacy tests use fictional data and mocked providers, including both real server handlers, primary/fallback provider failures, clinical detail preservation and local persistence of the original student message. No real clinical data or live API call is needed.
