@@ -12,6 +12,8 @@ interface Queues {
     full_name: string;
     email: string;
     registration_number: string;
+    specialty: string | null;
+    whatsapp_number: string | null;
     workplace: string;
     status: string;
   }[];
@@ -57,8 +59,9 @@ function AdminPage() {
                 <h3 className="font-medium">{item.full_name}</h3>
                 <p className="break-words text-sm">{item.email}</p>
                 <p className="text-sm">
-                  {item.workplace} · Registration {item.registration_number}
+                  {item.specialty || "Specialty pending"} · {item.workplace} · Registration {item.registration_number}
                 </p>
+                <p className="text-sm">WhatsApp: {item.whatsapp_number || "Not provided"}</p>
                 <p className="text-sm capitalize">{item.status}</p>
                 {item.status === "pending" &&
                   (decision?.id === item.user_id ? (

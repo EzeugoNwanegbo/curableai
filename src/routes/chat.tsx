@@ -190,6 +190,7 @@ function ChatPage() {
   const [doctorConnection, setDoctorConnection] = useState<DoctorConnection | null>(null);
   const [isSending, setIsSending] = useState(false);
   const sendingRef = useRef(false);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const [medicineSuggestion, setMedicineSuggestion] = useState("");
   const [savingMedicine, setSavingMedicine] = useState(false);
   const [medicineNotice, setMedicineNotice] = useState("");
@@ -891,11 +892,15 @@ function ChatPage() {
                   key={reply}
                   type="button"
                   disabled={isSending || !patient}
-                  onClick={() => void sendText(reply)}
+                  onClick={() => void sendText(input.trim() ? reply + ". " + input.trim() : reply)}
                 >
                   {reply}
                 </button>
               ))}
+              <button type="button" disabled={isSending || !patient}
+                onClick={() => composerRef.current?.focus()}>
+                Something else
+              </button>
             </div>
           ) : null}
           {!showPaceCheck && messages.some((message) => message.role === "patient") &&
@@ -913,6 +918,7 @@ function ChatPage() {
           ) : null}
           <div className="flex items-end gap-3 rounded-xl border border-input bg-card px-4 py-3 focus-within:border-muted-foreground/50">
             <textarea
+              ref={composerRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -923,7 +929,7 @@ function ChatPage() {
               }}
               rows={2}
               aria-label="Your message to Curable"
-              placeholder="Tell Curable what’s on your mind"
+              placeholder={quickReplies.length ? "Or answer in your own words…" : "Tell Curable what’s on your mind"}
               className="min-w-0 flex-1 resize-none bg-transparent text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground"
               disabled={isSending || !patient}
             />

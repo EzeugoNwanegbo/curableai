@@ -56,6 +56,8 @@ function DoctorApplication() {
                 user_id: user.id,
                 full_name: String(fields.get("name") ?? "").trim(),
                 registration_number: String(fields.get("registration") ?? "").trim(),
+                specialty: String(fields.get("specialty") ?? "").trim(),
+                whatsapp_number: String(fields.get("whatsapp") ?? "").trim(),
                 workplace: String(fields.get("workplace") ?? "").trim(),
               });
               if (error && error.code !== "23505") throw error;
@@ -68,12 +70,14 @@ function DoctorApplication() {
           }}
         >
           <p className="text-sm text-muted-foreground">
-            Curable reviews your registration before granting doctor access.
+            Only a Curable administrator can verify your registration and approve your doctor
+            account.
           </p>
           {(
             [
               ["name", "Full name", 120],
               ["registration", "Medical registration number", 80],
+              ["specialty", "Medical specialty", 100],
               ["workplace", "Hospital or clinic", 160],
             ] as const
           ).map(([name, label, limit]) => (
@@ -87,6 +91,19 @@ function DoctorApplication() {
               />
             </label>
           ))}
+          <label className="block text-sm">
+            WhatsApp number (with country code)
+            <input
+              required
+              type="tel"
+              name="whatsapp"
+              autoComplete="tel"
+              placeholder="+2348012345678"
+              pattern="[+][1-9][0-9]{7,14}"
+              title="Enter + followed by your country code and number, without spaces."
+              className="mt-1 block w-full rounded-lg border border-input bg-card p-3"
+            />
+          </label>
           {error && <p role="alert">{error}</p>}
           <button
             type="submit"

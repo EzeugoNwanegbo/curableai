@@ -1,3 +1,4 @@
+import { HealthConsent } from "@/components/HealthConsent";
 import { loadSampleClinicRecord } from "@/api/records";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -192,6 +193,7 @@ function ProfilePage() {
     <div className="container-page py-10">
       <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Page 04</div>
       <h1 className="mt-1 font-serif text-3xl text-foreground">Health record</h1>
+      <HealthConsent />
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         The persistent medical identity. Every AI response retrieves from here before responding.
       </p>

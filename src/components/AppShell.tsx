@@ -1,5 +1,6 @@
-import { createContext, useContext, useState } from "react";
-import { Link, Navigate, Outlet, useLocation } from "@tanstack/react-router";
+import { HealthConsent } from "@/components/HealthConsent";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Link, Navigate, Outlet, useBlocker, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { CurableLoader } from "@/components/CurableLoader";
 import "./demo/demo.css";
@@ -12,6 +13,38 @@ export const useSideMenu = () => useContext(SideMenuContext);
 export function AppShell() {
   const [historyTarget, setHistoryTarget] = useState<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  useBlocker({
+    disabled: !menuOpen,
+    enableBeforeUnload: false,
+    shouldBlockFn: ({ action }) => {
+      if (action !== "BACK") return false;
+      setMenuOpen(false);
+      toggleRef.current?.focus();
+      return true;
+    },
+  });
+  useEffect(() => {
+    if (!menuOpen) return;
+    function dismiss(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        toggleRef.current?.focus();
+      }
+    }
+    const mobile = window.matchMedia("(max-width: 800px)");
+    const resize = () => { if (!mobile.matches) setMenuOpen(false); };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    mobile.addEventListener("change", resize);
+    window.addEventListener("keydown", dismiss);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      mobile.removeEventListener("change", resize);
+      window.removeEventListener("keydown", dismiss);
+    };
+  }, [menuOpen]);
   const location = useLocation();
   const auth = useAuth();
   const publicPage = location.pathname === "/" || location.pathname === "/auth";
@@ -30,6 +63,7 @@ export function AppShell() {
       </div>
     );
   if (
+    location.pathname !== "/apply-doctor" &&
     auth.session &&
     auth.role === "patient" &&
     auth.user?.user_metadata?.health_setup_pending === true
@@ -58,6 +92,7 @@ export function AppShell() {
       <div className="cd cd-live-app">
         <button
           type="button"
+          ref={toggleRef}
           className="curable-menu-toggle"
           aria-expanded={menuOpen}
           aria-controls="curable-menu"
@@ -65,8 +100,27 @@ export function AppShell() {
         >
           {menuOpen ? "Close menu" : "Menu"}
         </button>
-        <aside id="curable-menu" className={`cd-sidebar ${menuOpen ? "is-open" : ""}`}>
-          <Link className="cd-brand" to="/">
+        {menuOpen && <button type="button" tabIndex={-1} aria-label="Dismiss menu"
+          className="curable-menu-backdrop" onClick={() => { setMenuOpen(false); toggleRef.current?.focus(); }} />}
+        <aside
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            swipeStart.current = menuOpen && event.touches.length === 1 ? { x: touch.clientX, y: touch.clientY } : null;
+          }}
+          onTouchCancel={() => { swipeStart.current = null; }}
+          onTouchEnd={(event) => {
+            const start = swipeStart.current;
+            swipeStart.current = null;
+            if (!start || event.touches.length) return;
+            const touch = event.changedTouches[0];
+            const left = start.x - touch.clientX;
+            if (left > 60 && left > 2 * Math.abs(touch.clientY - start.y)) {
+              setMenuOpen(false);
+              toggleRef.current?.focus();
+            }
+          }}
+          id="curable-menu" className={`cd-sidebar ${menuOpen ? "is-open" : ""}`}>
+          <Link className="cd-brand" to="/" onClick={() => setMenuOpen(false)}>
             curable<span className="cd-brand-dot">.</span>
           </Link>
           <div className="cd-workspace">
@@ -106,8 +160,8 @@ export function AppShell() {
             </button>
           </div>
         </aside>
-        <div className="cd-body">
-          <Outlet />
+        <div className="cd-body" inert={menuOpen}>
+          {location.pathname === "/chat" ? <HealthConsent><Outlet /></HealthConsent> : <Outlet />}
         </div>
       </div>
     </SideMenuContext.Provider>

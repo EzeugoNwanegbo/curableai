@@ -1,3 +1,4 @@
+import { HealthConsent } from "@/components/HealthConsent";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Loader2, LogIn } from "lucide-react";
@@ -279,11 +280,14 @@ function AuthPage() {
   const [clientReady, setClientReady] = useState(false);
   useEffect(() => setClientReady(true), []);
   const auth = useAuth();
-  const { redirect, mode: initialMode } = Route.useSearch();
-  const needsSetup =
-    auth.role === "patient" && auth.user?.user_metadata?.health_setup_pending === true;
-  const [setupDone, setSetupDone] = useState(false);
+  const { redirect: requestedPage, mode: initialMode } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode || "signin");
+  const [doctorSignup, setDoctorSignup] = useState(requestedPage === "/apply-doctor");
+  const redirect = mode === "signup" ? (doctorSignup ? "/apply-doctor" : requestedPage === "/apply-doctor" ? undefined : requestedPage) : requestedPage;
+  const needsSetup =
+    redirect !== "/apply-doctor" && auth.role === "patient" && auth.user?.user_metadata?.health_setup_pending === true;
+  const [setupDone, setSetupDone] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -401,7 +405,7 @@ function AuthPage() {
   };
 
   if (auth.session && needsSetup && !setupDone) {
-    return <HealthSetup onComplete={() => setSetupDone(true)} />;
+    return <HealthConsent><HealthSetup onComplete={() => setSetupDone(true)} /></HealthConsent>;
   }
 
   return (
@@ -433,6 +437,20 @@ function AuthPage() {
                 Create account
               </button>
             </div>
+
+            {mode === "signup" && (
+              <fieldset className="mt-5">
+                <legend className="mb-2 text-sm">How would you like to use Curable?</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {["Get care", "Join as a doctor"].map((label, i) => (
+                    <label key={label} className="flex min-h-11 items-center gap-2 rounded-lg border border-input px-3 text-sm">
+                      <input type="radio" name="accountPath" checked={doctorSignup === (i === 1)}
+                        onChange={() => setDoctorSignup(i === 1)} />{label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
             <button
               type="button"

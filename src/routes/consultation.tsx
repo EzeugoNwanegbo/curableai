@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -73,13 +75,12 @@ function ConsultationPage() {
   const { patientId, role } = useAuth();
   const [consultation, setConsultation] = useState<Consultation | null>(null);
   const [doctorConnection, setDoctorConnection] = useState<DoctorConnection | null>(null);
-  const [doctorForm, setDoctorForm] = useState({ doctorName: "", doctorEmail: "", clinicName: "" });
   const [messages, setMessages] = useState<ConsultationMessage[]>([]);
+  const [doctorNotice, setDoctorNotice] = useState("");
+  const [ratingNotice, setRatingNotice] = useState("");
   const [input, setInput] = useState("");
   const [doctorInput, setDoctorInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isSavingDoctor, setIsSavingDoctor] = useState(false);
-  const [doctorNotice, setDoctorNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -98,14 +99,6 @@ function ConsultationPage() {
         ]);
 
         setDoctorConnection(connection as DoctorConnection | null);
-        if (connection) {
-          setDoctorForm({
-            doctorName: (connection as DoctorConnection).doctorName || "",
-            doctorEmail: (connection as DoctorConnection).doctorEmail || "",
-            clinicName: (connection as DoctorConnection).clinicName || "",
-          });
-        }
-
         setConsultation(active as Consultation | null);
         if (active?.id) {
           const savedMessages = await getConsultationMessages({
@@ -130,54 +123,6 @@ function ConsultationPage() {
       window.clearInterval(timer);
     };
   }, [patientId, role, consultationId]);
-
-  const saveDoctor = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!patientId || role !== "patient") return;
-    setIsSavingDoctor(true);
-    setDoctorNotice(null);
-    setError(null);
-
-    try {
-      const saved = await savePatientDoctorConnection({
-        data: {
-          patientId,
-          doctorName: doctorForm.doctorName,
-          doctorEmail: doctorForm.doctorEmail,
-          clinicName: doctorForm.clinicName,
-        },
-      });
-
-      setDoctorConnection(saved as DoctorConnection);
-      setDoctorForm({
-        doctorName: (saved as DoctorConnection)?.doctorName || "",
-        doctorEmail: (saved as DoctorConnection)?.doctorEmail || "",
-        clinicName: (saved as DoctorConnection)?.clinicName || "",
-      });
-      setDoctorNotice("Validating doctor saved.");
-    } catch (err: any) {
-      setError(err.message || "Could not save this doctor.");
-    } finally {
-      setIsSavingDoctor(false);
-    }
-  };
-
-  const removeDoctor = async () => {
-    if (!patientId || role !== "patient") return;
-    setIsSavingDoctor(true);
-    setDoctorNotice(null);
-
-    try {
-      await removePatientDoctorConnection({ data: { patientId } });
-      setDoctorConnection(null);
-      setDoctorForm({ doctorName: "", doctorEmail: "", clinicName: "" });
-      setDoctorNotice("Validating doctor removed.");
-    } catch (err: any) {
-      setError(err.message || "Could not remove this doctor.");
-    } finally {
-      setIsSavingDoctor(false);
-    }
-  };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,24 +188,14 @@ function ConsultationPage() {
     return (
       <div className="container-page py-10">
         <h1 className="text-3xl">Doctors</h1>
-        <Link to="/apply-doctor" className="inline-flex min-h-11 items-center text-primary">
-          Apply as a doctor
-        </Link>
+
         <p className="mt-3 mb-8 text-sm text-muted-foreground">
           {role === "doctor"
             ? "Accept a confirmed student request from your review queue to begin a conversation."
             : "Choose your doctor, discuss your concern with Curable, then review and confirm your summary. A separate conversation opens when the doctor accepts."}
         </p>
         {role === "patient" ? (
-          <DoctorConnectionCard
-            connection={doctorConnection}
-            form={doctorForm}
-            setForm={setDoctorForm}
-            isSaving={isSavingDoctor}
-            notice={doctorNotice}
-            onSave={saveDoctor}
-            onRemove={removeDoctor}
-          />
+          <DoctorDirectory />
         ) : (
           <Link to="/doctor" className="rounded-lg bg-primary px-5 py-3 text-primary-foreground">
             Open review requests
@@ -290,6 +225,40 @@ function ConsultationPage() {
           </div>
         </header>
 
+        {doctorNotice && <p role="alert">{doctorNotice}</p>}
+        {role === "patient" && (
+          <label className="px-5 py-2 text-sm">
+            Rate this consultation
+            <select
+              defaultValue=""
+              className="ml-2 rounded bg-card p-2"
+              onChange={async (e) => {
+                const field = e.currentTarget;
+                field.disabled = true;
+                try {
+                  const { error } = await supabase.rpc("curable_rate_visit", {
+                    visit: consultation.id,
+                    score: Number(field.value),
+                  });
+                  setRatingNotice(error ? "Rating unavailable for this visit." : "Rating saved.");
+                  if (error) field.value = "";
+                } finally {
+                  field.disabled = false;
+                }
+              }}
+            >
+              <option disabled value="">
+                Choose stars
+              </option>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n} / 5
+                </option>
+              ))}
+            </select>
+            <span role="status"> {ratingNotice}</span>
+          </label>
+        )}
         <div className="flex-1 space-y-5 overflow-y-auto px-8 py-8">
           {messages.map((message) => (
             <div key={message.id} className={message.role === "patient" ? "flex justify-end" : ""}>
@@ -343,16 +312,7 @@ function ConsultationPage() {
       <aside className="hidden h-screen overflow-y-auto bg-surface px-6 py-7 lg:block">
         {role === "patient" ? (
           <div className="mb-5">
-            <DoctorConnectionCard
-              connection={doctorConnection}
-              form={doctorForm}
-              setForm={setDoctorForm}
-              isSaving={isSavingDoctor}
-              notice={doctorNotice}
-              onSave={saveDoctor}
-              onRemove={removeDoctor}
-              compact
-            />
+            <DoctorDirectory />
           </div>
         ) : null}
 
@@ -407,118 +367,62 @@ function ConsultationPage() {
   );
 }
 
-function DoctorConnectionCard({
-  connection,
-  form,
-  setForm,
-  isSaving,
-  notice,
-  onSave,
-  onRemove,
-  compact = false,
-}: {
-  connection: DoctorConnection | null;
-  form: { doctorName: string; doctorEmail: string; clinicName: string };
-  setForm: React.Dispatch<
-    React.SetStateAction<{ doctorName: string; doctorEmail: string; clinicName: string }>
-  >;
-  isSaving: boolean;
-  notice: string | null;
-  onSave: (event: React.FormEvent) => void;
-  onRemove: () => void;
-  compact?: boolean;
-}) {
+type DoctorListing = {
+  id: string;
+  name: string;
+  specialty: string | null;
+  workplace: string;
+  rating: number | null;
+  ratings: number;
+};
+
+function DoctorDirectory() {
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
+  const directory = useQuery({
+    queryKey: ["approved-doctor-directory"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("curable_directory");
+      if (error) throw error;
+      return data as DoctorListing[];
+    },
+  });
   return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-elegant">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-            <UserPlus className="h-3.5 w-3.5 text-primary" /> Validating doctor
-          </div>
-          <h2 className="mt-1 font-serif text-lg text-foreground">
-            {connection?.doctorName ? connection.doctorName : "Add your doctor"}
-          </h2>
-        </div>
-        {connection?.doctorName ? (
-          <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
-            Active
-          </span>
-        ) : null}
-      </div>
-
-      {connection?.doctorName ? (
-        <div className="mt-4 rounded-md border border-success/30 bg-success/10 p-3 text-sm">
-          <div className="font-medium text-foreground">{connection.doctorName}</div>
-          {connection.doctorEmail ? (
-            <div className="mt-1 text-xs text-muted-foreground">{connection.doctorEmail}</div>
-          ) : null}
-          {connection.clinicName ? (
-            <div className="mt-1 text-xs text-muted-foreground">{connection.clinicName}</div>
-          ) : null}
-        </div>
-      ) : null}
-
-      <form className="mt-4 grid gap-3" onSubmit={onSave}>
-        <label className="text-sm">
-          <span className="text-xs font-medium text-muted-foreground">Doctor name</span>
-          <input
-            value={form.doctorName}
-            onChange={(event) => setForm((prev) => ({ ...prev, doctorName: event.target.value }))}
-            placeholder="Doctor name"
-            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-            required
-          />
-        </label>
-
-        <label className="text-sm">
-          <span className="text-xs font-medium text-muted-foreground">Doctor email</span>
-          <input
-            value={form.doctorEmail}
-            onChange={(event) => setForm((prev) => ({ ...prev, doctorEmail: event.target.value }))}
-            placeholder="Doctor email"
-            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-          />
-        </label>
-
-        {!compact ? (
-          <label className="text-sm">
-            <span className="text-xs font-medium text-muted-foreground">Clinic or hospital</span>
-            <input
-              value={form.clinicName}
-              onChange={(event) => setForm((prev) => ({ ...prev, clinicName: event.target.value }))}
-              placeholder="Clinic or hospital name"
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-            />
-          </label>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2">
+    <section aria-label="Verified doctors" className="space-y-3">
+      {directory.isPending && <p>Loading doctors…</p>}
+      {directory.isError && (
+        <button onClick={() => void directory.refetch()}>Couldn’t load doctors. Retry</button>
+      )}
+      {directory.data?.length === 0 && <p>No verified doctors listed yet.</p>}
+      {directory.data?.map((d) => (
+        <article key={d.id} className="rounded-lg border border-border p-4">
+          <h2 className="font-semibold">{d.name}</h2>
+          <p>{[d.specialty, d.workplace].filter(Boolean).join(" · ")}</p>
+          <p className="text-sm text-muted-foreground">
+            {d.ratings ? d.rating + " / 5 (" + d.ratings + " ratings)" : "No ratings yet"}
+          </p>
           <button
-            type="submit"
-            disabled={isSaving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-accent disabled:opacity-60"
+            className="min-h-11 text-primary"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const { error } = await supabase.rpc("curable_choose_doctor", { target: d.id });
+                setNotice(
+                  error
+                    ? "Couldn’t select this doctor. Check your existing requests."
+                    : d.name + " selected.",
+                );
+              } finally {
+                setSaving(false);
+              }
+            }}
           >
-            {isSaving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
-            Save doctor
+            Choose doctor
           </button>
-          {connection?.doctorName ? (
-            <button
-              type="button"
-              onClick={onRemove}
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-60"
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Remove
-            </button>
-          ) : null}
-        </div>
-      </form>
-
-      {notice ? <p className="mt-3 text-xs text-success">{notice}</p> : null}
+        </article>
+      ))}
+      <p role="status">{notice}</p>
     </section>
   );
 }

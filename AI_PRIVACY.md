@@ -28,6 +28,20 @@ The previous school pilot specified Nigeria-only processing. Confirm the indepen
 
 Once there is enough information for review, offer a short handover. Request doctor opens an editable draft. The student chooses whether to send it. Only report submission or doctor acceptance after the corresponding action succeeds. Urgent guidance takes precedence over waiting for a reply.
 
+## Independent launch assessment — draft for review
+
+Curable decides why and how account-linked symptoms, medicines and chat history are processed. The proposed purposes are personalized AI conversations, longitudinal recall and student-requested doctor reviews. Contact details support authentication. Evaluate a lawful basis for each purpose and a sensitive-data condition for health information. The proposed AI consent is recorded as a version and latest change time in the user's account. Doctor sharing has a separate confirmation step. Review whether additional consent evidence is required.
+
+| Recipient | Processing observed | Evidence still needed |
+| --- | --- | --- |
+| Vercel | US application functions handle requests | Signed processor terms, locations and retention of logs, subprocessors and transfer basis |
+| Supabase | Account and health records in Ireland | Processor terms, backup and support locations, retention, deletion and transfer basis |
+| OpenAI | Filtered health context for chat and clinical note generation | Account-specific terms, inference and retention locations, safeguards and transfer basis |
+| DeepSeek | Conditional fallback for chat and notes | Verify whether enabled on production and document the same evidence before use |
+| Selected doctor | Receives the confirmed handover | Verify identity, restricted access and encounter lifecycle with separate test accounts |
+
+Key risks include identification through free text, inappropriate access to records, inaccurate summaries, and retention after withdrawal. Existing controls include local filtering, authenticated requests and patient review. Residual risk has not been assessed or accepted. Confirm retention periods, encryption and key access, deletion and rights contacts, handling of minors, incident response, actual vendor contracts and the transfer basis for each recipient. The operator must verify and sign off on the factual record, obtain qualified advice on NDPC registration and filing, and complete the filing as applicable. This document is a working assessment, not a filed DPIA.
+
 ## Verification
 
 Run `npm run test:privacy` and `node --test tests/quick-replies.test.mjs` with Node 22.22 or later. Privacy tests use fictional data and mocked providers, including both real server handlers, primary/fallback provider failures, clinical detail preservation and local persistence of the original student message. No real clinical data or live API call is needed.

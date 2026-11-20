@@ -120,7 +120,7 @@ function fixture(failures = []) {
             id: patientId,
             email: "amara@fictional.invalid",
             phone: "08031234567",
-            user_metadata: { full_name: "Amara Okafor" },
+            user_metadata: { full_name: "Amara Okafor", health_ai_consent: "2026-11-20-v1" },
           },
         },
         error: null,
@@ -261,4 +261,15 @@ for (const operation of ["chat", "report"]) {
 
 test.after(async () => {
   await rm(work, { recursive: true, force: true });
+});
+
+test("missing or withdrawn consent blocks chat and report before storage or external requests", async () => {
+  const state = fixture();
+  globalThis.__privacyFixture = state;
+  state.client.auth.getUser = async () => ({ data: { user: { user_metadata: {} } } });
+  for (const operation of [sendMessage, createDoctorReviewReport]) {
+    await assert.rejects(operation({ data: { patientId, message: "Fictional concern" } }), /consent/);
+  }
+  assert.equal(state.requests.length, 0);
+  assert.equal(state.writes.length, 0);
 });

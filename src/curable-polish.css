@@ -440,3 +440,15 @@
     min-height: 0;
   }
 }
+
+.curable-menu-backdrop { display: none; }
+@media (max-width: 800px) {
+  .cd.cd-live-app .curable-menu-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgb(8 8 16 / 45%);
+  }
+  .cd.cd-live-app .curable-menu-toggle { position: relative; z-index: 41; }
+}

@@ -1,3 +1,4 @@
+import { hasHealthConsent } from "@/lib/health-consent";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { readDoctorConnection } from "@/api/doctor-connection";
@@ -26,6 +27,13 @@ const DEEPSEEK_MODEL = "deepseek-chat";
 
 const structuredFallbackSafetyNote =
   "OpenAI and DeepSeek were both unavailable, so Curable created this structured report from saved profile, medications, memory, and recent messages.";
+
+async function requireHealthConsent(client: Awaited<ReturnType<typeof import("@/lib/supabase-server").getAuthenticatedClient>>) {
+  const { data, error } = await client.auth.getUser();
+  if (error || !hasHealthConsent(data.user?.user_metadata)) {
+    throw new Error("Review your health data consent before using AI.");
+  }
+}
 
 async function patientPrivacyFilter(client: any, patient: any, medicines: any[], memories: any[]) {
   const [
@@ -788,6 +796,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     const { OpenAI } = await import("openai");
     const { getAuthenticatedClient } = await import("@/lib/supabase-server");
     const client = await getAuthenticatedClient();
+    await requireHealthConsent(client);
 
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
@@ -1115,6 +1124,7 @@ export const createDoctorReviewReport = createServerFn({ method: "POST" })
     const { OpenAI } = await import("openai");
     const { getAuthenticatedClient } = await import("@/lib/supabase-server");
     const client = await getAuthenticatedClient();
+    await requireHealthConsent(client);
 
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY || "missing-openai-key",
