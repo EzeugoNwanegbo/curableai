@@ -8,6 +8,8 @@ export function quickRepliesFor(question: string | undefined): string[] {
     /\b(?:or|and)\b|,|\bscale\b/.test(q)
   )
     return [];
+  if (/^how much .*affecting .*activities\??$/.test(q))
+    return ["Not much", "Slowing me down", "Can’t do them", "Not sure"];
   if (/how (?:severe|bad|painful)|rate (?:the|your) pain|severity/.test(q))
     return ["Mild", "Moderate", "Severe", "Not sure"];
   if (/how long|for how many/.test(q))

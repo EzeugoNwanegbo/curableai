@@ -172,6 +172,8 @@ function mapDbMessage(m: any): Message {
   };
 }
 
+const summaryRequest = "Please summarize what I have shared so far. Mark anything unanswered as unknown so I can review it.";
+
 function ChatPage() {
   const sideMenu = useSideMenu();
   const { patientId, displayName } = useAuth();
@@ -515,8 +517,10 @@ function ChatPage() {
   };
   const isChatPreparing = chatStateQuery.isLoading && !patient;
   const lastMessage = messages[messages.length - 1];
+  const previousMessage = messages[messages.length - 2];
+  const requestedSummary = previousMessage?.role === "patient" && previousMessage.text === summaryRequest;
   const quickReplies =
-    lastMessage?.role === "ai" && !isSending
+    lastMessage?.role === "ai" && !isSending && !requestedSummary && !lastMessage.reasoning?.stewardship?.shouldStopQuestioning
       ? quickRepliesFor(lastMessage.reasoning?.nextQuestion)
       : [];
 
@@ -868,7 +872,20 @@ function ChatPage() {
               ))}
             </div>
           ) : null}
-          <div className="flex items-end gap-3 rounded-xl border border-input bg-card px-4 py-3 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+          {messages.some((message) => message.role === "patient") &&
+          lastMessage?.role === "ai" &&
+          !requestedSummary &&
+          !lastMessage.reasoning?.stewardship?.shouldStopQuestioning ? (
+            <button
+              type="button"
+              disabled={isSending || !patient}
+              className="mb-2 min-h-11 text-sm text-muted-foreground hover:text-foreground"
+              onClick={() => void sendText(summaryRequest)}
+            >
+              Summarize what I’ve shared
+            </button>
+          ) : null}
+          <div className="flex items-end gap-3 rounded-xl border border-input bg-card px-4 py-3 focus-within:border-muted-foreground/50">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

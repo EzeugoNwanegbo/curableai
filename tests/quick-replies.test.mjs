@@ -38,3 +38,9 @@ test("ambiguous, numeric-scale and multiple questions do not suggest misleading 
     assert.deepEqual(quickRepliesFor(q), []);
   }
 });
+
+test("offers activity-impact answers for a single focused question", () => {
+  assert.deepEqual(quickRepliesFor("How much is this affecting your usual activities?"),
+    ["Not much", "Slowing me down", "Can’t do them", "Not sure"]);
+  assert.deepEqual(quickRepliesFor("How much is this affecting your activities? Do you have fever?"), []);
+});
