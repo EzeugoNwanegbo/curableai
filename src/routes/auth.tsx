@@ -82,7 +82,7 @@ function DailyHabits() {
         {answered} answered · {habitQuestions.length - step} left
       </p>
       <progress
-        className="w-full accent-primary"
+        className="curable-onboarding-progress"
         value={step}
         max={habitQuestions.length}
         aria-label="Daily habits progress"
@@ -175,7 +175,7 @@ function HealthSetup({ onComplete }: { onComplete: () => void }) {
         Step {step + 1} of {pages.length} · {pages[step]}
       </p>
       <progress
-        className="w-full accent-primary"
+        className="curable-onboarding-progress"
         aria-label="Health setup progress"
         value={step + 1}
         max={pages.length}

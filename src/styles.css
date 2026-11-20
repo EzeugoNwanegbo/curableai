@@ -263,3 +263,31 @@
 .cd-live-app .shadow-elegant {
   box-shadow: none;
 }
+
+/* Explicit native progress styling keeps onboarding consistent across browsers. */
+.curable-onboarding-progress {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: #2b253a;
+  color: #ad7cff;
+  accent-color: #ad7cff;
+}
+.curable-onboarding-progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: #2b253a;
+}
+.curable-onboarding-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: #ad7cff;
+}
+.curable-onboarding-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: #ad7cff;
+}

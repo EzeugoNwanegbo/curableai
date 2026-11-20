@@ -262,6 +262,13 @@
 }
 .curable-chat-header {
   background: var(--background);
+  padding-block: 4px;
+}
+.curable-chat-header button {
+  min-height: 44px;
+}
+.curable-chat-messages {
+  padding-block: 16px;
 }
 .curable-chat-messages > *,
 .curable-composer > * {
@@ -273,12 +280,12 @@
   overflow-wrap: anywhere;
 }
 .curable-chat-empty {
-  padding: 48px 0 24px;
+  padding: 8px 0 16px;
 }
 .curable-chat-empty h2 {
   font-size: clamp(28px, 3vw, 36px);
   line-height: 1.25;
-  margin: 16px 0;
+  margin: 0 0 12px;
   font-weight: 500;
 }
 .curable-chat-empty > p {
@@ -390,7 +397,7 @@
     padding: 24px 0;
   }
   .curable-chat-empty {
-    padding-top: 24px;
+    padding-top: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
