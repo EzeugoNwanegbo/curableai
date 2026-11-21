@@ -12,6 +12,9 @@ import appCss from "../styles.css?url";
 import polishCss from "../curable-polish.css?url";
 import { AppShell } from "@/components/AppShell";
 import { AuthProvider } from "@/lib/auth";
+import { trackPage } from "@/lib/analytics";
+import { useEffect } from "react";
+import { useRouterState } from "@tanstack/react-router";
 
 function NotFoundComponent() {
   return (
@@ -139,8 +142,19 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <AnalyticsTracker />
         <AppShell />
       </AuthProvider>
     </QueryClientProvider>
   );
+}
+
+function AnalyticsTracker() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  useEffect(() => {
+    trackPage(pathname);
+  }, [pathname]);
+
+  return null;
 }

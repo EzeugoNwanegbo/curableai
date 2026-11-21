@@ -28,6 +28,7 @@ function AdminPage() {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [openApplication, setOpenApplication] = useState<string | null>(null);
   const queues = useQuery({
     queryKey: ["admin-queues", user?.id],
     enabled: allowed,
@@ -52,12 +53,21 @@ function AdminPage() {
             <h2 className="text-xl">Doctor applications</h2>
             {queues.data.applications.length === 0 && <p>No applications yet.</p>}
             {queues.data.applications.map((item) => (
-              <details
-                key={item.user_id}
-                className="rounded-lg border border-border bg-card"
-              >
-                <summary className="cursor-pointer p-4 font-medium">{item.full_name} · Application details</summary>
-                <div className="space-y-2 px-4 pb-4">
+              <article key={item.user_id} className="rounded-lg border border-border bg-card">
+                <button
+                  type="button"
+                  aria-expanded={openApplication === item.user_id}
+                  aria-controls={`doctor-application-${item.user_id}`}
+                  className="flex min-h-14 w-full items-center justify-between gap-3 p-4 text-left font-medium"
+                  onClick={() => {
+                    setError("");
+                    setOpenApplication((current) => current === item.user_id ? null : item.user_id);
+                  }}
+                >
+                  <span>{item.full_name}</span>
+                  <span className="text-sm text-muted-foreground">{openApplication === item.user_id ? "Hide details" : "View application"} · {item.status}</span>
+                </button>
+                {openApplication === item.user_id && <div id={`doctor-application-${item.user_id}`} className="space-y-2 px-4 pb-4">
                 <p className="break-words text-sm">{item.email}</p>
                 <p className="text-sm">
                   {item.specialty || "Specialty pending"} · {item.workplace} · Registration {item.registration_number}
@@ -82,17 +92,23 @@ function AdminPage() {
                             setSaving(true);
                             setError("");
                             try {
-                              const { error } = await supabase.rpc("curable_review_application", {
+                              const { error: saveError } = await supabase.rpc("curable_review_application", {
                                 target: decision.id,
                                 decision: decision.status,
                               });
-                              if (error) throw error;
+                              if (saveError) throw saveError;
                               setDecision(null);
                               await queues.refetch();
-                            } catch {
-                              setError(
-                                "Couldn’t save your decision. Refresh the queue and try again.",
-                              );
+                            } catch (saveError) {
+                              const message = saveError instanceof Error ? saveError.message : "";
+                              setError(message.includes("verify their email")
+                                ? "This doctor must verify their email before approval."
+                                : message.includes("no longer pending")
+                                  ? "This application is no longer pending. Refreshing the list…"
+                                  : message.includes("Administrator access required")
+                                    ? "Your admin session has expired. Sign out and back in, then try again."
+                                    : `Couldn’t save your decision${message ? `: ${message}` : ". Refresh the queue and try again."}`);
+                              if (message.includes("no longer pending")) await queues.refetch();
                             } finally {
                               setSaving(false);
                             }
@@ -136,8 +152,8 @@ function AdminPage() {
                       </button>
                     </div>
                   ))}
-                </div>
-              </details>
+                </div>}
+              </article>
             ))}
           </section>
           <section className="space-y-3">
