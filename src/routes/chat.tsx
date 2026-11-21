@@ -803,7 +803,7 @@ function ChatPage() {
                   ) : (
                     <Send className="h-4 w-4" />
                   )}
-                  {reportSent ? "Sent to doctor" : isSendingReport ? "Sending your note…" : "Send to doctor"}
+                  {reportSent ? "Sent to doctor" : isSendingReport ? "Sending your note…" : "Request doctor"}
                 </button>
               </div>
             </div>

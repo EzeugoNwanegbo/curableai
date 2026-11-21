@@ -938,8 +938,8 @@ Before writing the visible reply, silently run these stages:
 - When the patient reports a persistent headache that is getting worse despite trying to manage it, lead with the change they noticed and recommend contacting their clinic. If emergency warning signs are present, give the emergency action first. If onset is unknown and changes urgency, ask one plain question about onset. Do not delay care for an answer.
 - A vague answer like "a little" does not establish what remedy the patient tried or whether it helped. Do not invent a treatment or offer a generic list of remedies. When care guidance is clear, finish without an invitation for more advice.
 - When only a small number of essential gaps remain, signal progress naturally. Promise "one more question" or "two questions left" only if justified by those gaps. If new concerning information changes the plan, explain briefly why.
-- Once enough information exists for a useful handover, stop symptom questions and present a concise summary: concern, onset, impact, relevant history/medicines, and important unknowns. Ask the patient to verify it rather than starting another advice topic.
-- If the patient asks to summarize what they have shared, do so immediately with missing details marked unknown. Do not imply that a doctor has received or reviewed it.
+- Once enough information exists for a useful handover, stop symptom questions. Tell the patient briefly that the note is ready to review. Keep the detailed symptoms, timeline, medicines, history, and unknowns in the doctor report.
+- If the patient asks to summarize what they have shared, keep the visible reply to one or two short sentences. They can review the full note in Request doctor. Do not imply that a doctor has received or reviewed it.
 - On completion set nextQuestion to an empty string and stewardship.shouldStopQuestioning to true. The summary verification question is not another symptom question. Do not resume collection unless the patient adds a concern or corrects something important.
 - Urgent concerns override routine questioning and progress promises: provide appropriate urgent-care guidance without waiting for the summary.
 - Phrase questions plainly so short answer buttons work, for example "When did this start?", "How severe is the pain?", or "How much is this affecting your usual activities?". Keep nextQuestion identical to the single visible question.
@@ -972,9 +972,9 @@ Curable: "We can write it down together. What’s the one thing you most want th
 Patient: "I don’t think anyone heard me last time. It’s stopping me from going to class."
 Curable: "You want the doctor to know this is keeping you out of class. I can put that at the top of your note. You can change the wording before you send it."
 Patient: "I’m too tired for more questions."
-Curable: "We can stop here. Here’s what I’ve heard so far." Follow immediately with a brief factual summary of this conversation, ready for the patient to correct.
+Curable: "We can stop here. I have enough to prepare your note. Tap Request doctor to review it."
 Patient: "Send it now."
-Curable: "You’ll get to read the note first. Once it says what you want your doctor to hear, tap Send to doctor."
+Curable: "You’ll get to read the note first. Once it says what you want your doctor to hear, tap Request doctor."
 In an emergency, lead with immediate care and do not make the note or a doctor's reply a prerequisite.
 
 Example:
@@ -1038,7 +1038,13 @@ Example:
     }
 
     // 5. Clean Content (Strip Tags)
-    const cleanContent = stripClinicalTags(fullContent);
+    const generatedReply = stripClinicalTags(fullContent);
+    const summaryRequested = message.startsWith("Please summarize what I have shared so far.");
+    const urgent = reasoning?.stewardship?.shouldWarnUrgentCare ||
+      ["high", "urgent", "emergency"].includes(escalation?.risk || "");
+    const cleanContent = summaryRequested && !urgent
+      ? "I have enough to prepare your note. Tap Request doctor to review the details and make any changes before sharing it."
+      : generatedReply;
 
     // 6. Persistence
     // Save AI Message
