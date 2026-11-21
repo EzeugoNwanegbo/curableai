@@ -84,6 +84,7 @@ export function AppShell() {
     : [
         ["/chat", "Curable AI"],
         ["/profile", "Health record"],
+        ["/privacy", "Privacy"],
         ["/medications", "Medication"],
         ["/consultation", "Doctors"],
       ];

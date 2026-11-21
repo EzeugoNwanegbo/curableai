@@ -42,7 +42,7 @@ export function HealthConsent({ children }: { children?: ReactNode }) {
       </p>
       <p>
         You choose whether to send a note to a doctor. You can turn off future AI processing in
-        Health record. Turning it off leaves earlier records in your account.
+        Privacy. Turning it off leaves earlier records in your account.
       </p>
       <button
         type="button"

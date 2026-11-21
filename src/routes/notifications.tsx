@@ -37,7 +37,6 @@ function NotificationsPage() {
 
   return (
     <div className="container-page py-10">
-      <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Page 05</div>
       <h1 className="mt-1 font-serif text-3xl text-foreground">Notifications & Follow-up</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         Continuity between consultations. Reminders, prompts, and alerts that keep the patient

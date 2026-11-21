@@ -1,5 +1,4 @@
-import { HealthConsent } from "@/components/HealthConsent";
-import { loadSampleClinicRecord } from "@/api/records";
+import { supabase } from "@/lib/supabase";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
@@ -54,7 +53,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function ProfilePage() {
-  const { patientId, displayName } = useAuth();
+  const { patientId, displayName, user } = useAuth();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [newFact, setNewFact] = useState({ label: "", details: "" });
@@ -62,8 +61,9 @@ function ProfilePage() {
   const [factNotice, setFactNotice] = useState("");
   const [editingMemory, setEditingMemory] = useState<string | null>(null);
   const [draftMemory, setDraftMemory] = useState({ label: "", details: "" });
-  const [loadingSample, setLoadingSample] = useState(false);
-  const [sampleNotice, setSampleNotice] = useState("");
+  const [institution, setInstitution] = useState(String(user?.user_metadata?.advocacy_institution || ""));
+  const [advocating, setAdvocating] = useState(false);
+  const [advocacyNotice, setAdvocacyNotice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -191,45 +191,27 @@ function ProfilePage() {
 
   return (
     <div className="container-page py-10">
-      <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Page 04</div>
       <h1 className="mt-1 font-serif text-3xl text-foreground">Health record</h1>
-      <HealthConsent />
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         The persistent medical identity. Every AI response retrieves from here before responding.
       </p>
 
-      <section className="mt-8 rounded-xl border border-primary/20 bg-primary/5 p-6">
-        <h2 className="text-lg">Preview a clinic connection</h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          For investor demonstrations, add a clearly labelled fictional record with allergies,
-          medicines, a clinic visit and a test result. Your actual profile stays separate. No
-          university EMR is connected.
-        </p>
-        <button
-          className="mt-4 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-          disabled={loadingSample}
-          onClick={async () => {
-            setLoadingSample(true);
-            setSampleNotice("");
-            try {
-              const result = await loadSampleClinicRecord({ data: { confirmed: true } });
-              setSampleNotice(result.notice);
-              await queryClient.invalidateQueries({ queryKey: ["patient-profile", patientId] });
-              await queryClient.invalidateQueries({ queryKey: ["patient-chat-state", patientId] });
-            } catch (e) {
-              setSampleNotice(e instanceof Error ? e.message : "Could not load sample records.");
-            } finally {
-              setLoadingSample(false);
-            }
-          }}
-        >
-          {loadingSample ? "Adding sample record…" : "Add fictional clinic record"}
-        </button>
-        {sampleNotice && (
-          <p role="status" className="mt-3 text-sm">
-            {sampleNotice}
-          </p>
-        )}
+      <section className="mt-8 rounded-xl border border-border bg-card p-6">
+        <h2 className="text-lg">Bring Curable to your university or hospital</h2>
+        <p className="mt-2 text-sm text-muted-foreground">Your support helps us show universities and hospitals where people want easier access to care and build partnerships with them.</p>
+        <form className="mt-4 space-y-3" onSubmit={async (event) => {
+          event.preventDefault();
+          setAdvocating(true); setAdvocacyNotice("");
+          const { error } = await supabase.auth.updateUser({ data: { advocacy_institution: institution.trim(), advocacy_supported_at: new Date().toISOString() } });
+          setAdvocacyNotice(error ? "Could not save your support. Please try again." : "Thank you. Your support has been saved.");
+          setAdvocating(false);
+        }}>
+          <label className="block text-sm">University or hospital
+            <input required maxLength={150} value={institution} onChange={(event) => setInstitution(event.currentTarget.value)} placeholder="Enter its name" className="mt-2 block w-full rounded-lg border border-input bg-background p-3" />
+          </label>
+          <button disabled={advocating} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{advocating ? "Saving…" : "Add my support"}</button>
+          {advocacyNotice && <p role="status" className="text-sm">{advocacyNotice}</p>}
+        </form>
       </section>
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
         <Section title="Basic profile">

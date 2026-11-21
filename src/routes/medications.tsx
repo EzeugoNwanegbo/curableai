@@ -121,9 +121,6 @@ function MedsPage() {
     <div className="container-page py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-            Page 02
-          </div>
           <h1 className="mt-1 font-serif text-3xl text-foreground">Medication</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Your list helps Curable flag possible side effects or interactions to discuss with a

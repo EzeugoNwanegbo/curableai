@@ -228,9 +228,6 @@ function DoctorPage() {
     <div className="container-page py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-            Page 03
-          </div>
           <h1 className="mt-1 font-serif text-3xl text-foreground">Doctor Dashboard</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Structured AI summaries first. Accept Curable reasoning or open a separate patient chat.

@@ -39,10 +39,29 @@ function AdminPage() {
     },
   });
 
+  const advocates = useQuery({
+    queryKey: ["admin-advocates", user?.id],
+    enabled: allowed,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("curable_admin_advocates");
+      if (error) throw error;
+      return data as { institution: string; name: string; supported_at: string }[];
+    },
+  });
+
   if (!allowed) return <Navigate to="/" replace />;
   return (
     <main className="mx-auto max-w-3xl space-y-8 p-5 sm:p-8">
       <h1 className="text-2xl">Admin</h1>
+      <section className="space-y-3">
+        <h2 className="text-xl">University and hospital support</h2>
+        {advocates.isPending && <p>Loading support…</p>}
+        {advocates.isError && <button onClick={() => void advocates.refetch()}>Couldn’t load support. Retry</button>}
+        {advocates.data && <>
+          <p className="text-sm text-muted-foreground">{advocates.data.length} people have added their support.</p>
+          {advocates.data.map((item, index) => <article key={`${item.name}-${item.institution}-${index}`} className="rounded-lg border border-border bg-card p-4"><p>{item.institution}</p><p className="text-sm text-muted-foreground">{item.name}</p></article>)}
+        </>}
+      </section>
       {queues.isPending && <p role="status">Loading requests…</p>}
       {queues.isError && (
         <button onClick={() => void queues.refetch()}>Couldn’t load requests. Retry</button>
