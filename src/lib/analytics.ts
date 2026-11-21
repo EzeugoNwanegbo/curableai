@@ -5,20 +5,7 @@ const postHogHost = import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.c
 
 let initialized = false;
 
-function analyticsPage(pathname: string) {
-  if (pathname === "/") return "home";
-  if (pathname.startsWith("/chat")) return "chat";
-  if (pathname.startsWith("/records")) return "health_records";
-  if (pathname.startsWith("/medications")) return "medications";
-  if (pathname.startsWith("/consultation")) return "doctors";
-  if (pathname.startsWith("/apply-doctor")) return "doctor_application";
-  if (pathname.startsWith("/doctor")) return "doctor_workspace";
-  if (pathname.startsWith("/admin")) return "admin";
-  if (pathname.startsWith("/auth")) return "sign_in";
-  return "other";
-}
-
-export function trackPage(pathname: string) {
+export function trackPage() {
   if (!postHogKey || import.meta.env.DEV || typeof window === "undefined") return;
 
   if (!initialized) {
@@ -34,10 +21,15 @@ export function trackPage(pathname: string) {
       person_profiles: "never",
       persistence: "memory",
       ip: false,
+      before_send: (event) => {
+        if (!event) return event;
+        event.properties = { $geoip_disable: true };
+        return event;
+      },
     });
     initialized = true;
   }
 
-  // Send a fixed page category only. Never forward URLs, text, identity, or health details.
-  posthog.capture("curable_page_view", { page: analyticsPage(pathname) });
+  // Count app navigation without sending URLs, page labels, text, or identity.
+  posthog.capture("curable_app_view");
 }
