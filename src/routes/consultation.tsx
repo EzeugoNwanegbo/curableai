@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -377,6 +377,7 @@ type DoctorListing = {
 };
 
 function DoctorDirectory() {
+  const queryClient = useQueryClient();
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const directory = useQuery({
@@ -408,15 +409,14 @@ function DoctorDirectory() {
               setSaving(true);
               try {
                 const { error } = await supabase.rpc("curable_choose_doctor", { target: d.id });
-                setNotice(
-                  error
-                    ? error.message.includes("Doctor change requires a new sharing authorization")
-                      ? "You have already shared a request with a doctor. To choose another doctor, a new sharing authorization is needed."
-                      : error.message.includes("Patient account required")
-                        ? "A patient profile is needed to choose a doctor."
-                        : "Couldn’t select this doctor. Please try again."
-                    : d.name + " selected.",
-                );
+                if (error) {
+                  setNotice(error.message.includes("Patient account required")
+                    ? "A patient profile is needed to choose a doctor."
+                    : "Couldn’t select this doctor. Please try again.");
+                } else {
+                  await queryClient.invalidateQueries({ queryKey: ["patient-chat-state"] });
+                  setNotice(d.name + " selected. Review your summary in chat before sending it.");
+                }
               } finally {
                 setSaving(false);
               }
