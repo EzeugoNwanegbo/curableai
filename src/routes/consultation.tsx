@@ -410,7 +410,11 @@ function DoctorDirectory() {
                 const { error } = await supabase.rpc("curable_choose_doctor", { target: d.id });
                 setNotice(
                   error
-                    ? "Couldn’t select this doctor. Check your existing requests."
+                    ? error.message.includes("Doctor change requires a new sharing authorization")
+                      ? "You have already shared a request with a doctor. To choose another doctor, a new sharing authorization is needed."
+                      : error.message.includes("Patient account required")
+                        ? "A patient profile is needed to choose a doctor."
+                        : "Couldn’t select this doctor. Please try again."
                     : d.name + " selected.",
                 );
               } finally {
