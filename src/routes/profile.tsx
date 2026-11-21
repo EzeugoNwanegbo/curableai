@@ -64,6 +64,7 @@ function ProfilePage() {
   const [institution, setInstitution] = useState(String(user?.user_metadata?.advocacy_institution || ""));
   const [advocating, setAdvocating] = useState(false);
   const [advocacyNotice, setAdvocacyNotice] = useState("");
+  const [supportAdded, setSupportAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -196,14 +197,16 @@ function ProfilePage() {
         The persistent medical identity. Every AI response retrieves from here before responding.
       </p>
 
-      <section className="mt-8 rounded-xl border border-border bg-card p-6">
+      {supportAdded && <p role="status" className="mt-6 text-sm text-muted-foreground">Thank you for your support.</p>}
+      {!supportAdded && !user?.user_metadata?.advocacy_supported_at && <section className="mt-8 rounded-xl border border-border bg-card p-6">
         <h2 className="text-lg">Bring Curable to your university or hospital</h2>
         <p className="mt-2 text-sm text-muted-foreground">Your support helps us show universities and hospitals where people want easier access to care and build partnerships with them.</p>
         <form className="mt-4 space-y-3" onSubmit={async (event) => {
           event.preventDefault();
           setAdvocating(true); setAdvocacyNotice("");
           const { error } = await supabase.auth.updateUser({ data: { advocacy_institution: institution.trim(), advocacy_supported_at: new Date().toISOString() } });
-          setAdvocacyNotice(error ? "Could not save your support. Please try again." : "Thank you. Your support has been saved.");
+          if (error) setAdvocacyNotice("Could not save your support. Please try again.");
+          else setSupportAdded(true);
           setAdvocating(false);
         }}>
           <label className="block text-sm">University or hospital
@@ -212,7 +215,7 @@ function ProfilePage() {
           <button disabled={advocating} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{advocating ? "Saving…" : "Add my support"}</button>
           {advocacyNotice && <p role="status" className="text-sm">{advocacyNotice}</p>}
         </form>
-      </section>
+      </section>}
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
         <Section title="Basic profile">
           <dl className="space-y-3 text-sm">
