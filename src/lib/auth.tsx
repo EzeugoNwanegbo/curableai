@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ) => {
     const currentRole = getUserRole(currentSession.user);
 
-    if (currentRole !== "patient") {
+    if (currentRole !== "patient" || currentSession.user.user_metadata?.account_path === "doctor_applicant") {
       setPatientId(null);
       return;
     }

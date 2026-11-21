@@ -66,6 +66,7 @@ export function AppShell() {
     location.pathname !== "/apply-doctor" &&
     auth.session &&
     auth.role === "patient" &&
+    auth.user?.user_metadata?.account_path !== "doctor_applicant" &&
     auth.user?.user_metadata?.health_setup_pending === true
   )
     return <Navigate to="/auth" replace />;

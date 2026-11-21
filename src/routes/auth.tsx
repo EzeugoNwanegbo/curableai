@@ -284,8 +284,9 @@ function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">(initialMode || "signin");
   const [doctorSignup, setDoctorSignup] = useState(requestedPage === "/apply-doctor");
   const redirect = mode === "signup" ? (doctorSignup ? "/apply-doctor" : requestedPage === "/apply-doctor" ? undefined : requestedPage) : requestedPage;
+  const doctorApplicant = auth.user?.user_metadata?.account_path === "doctor_applicant";
   const needsSetup =
-    redirect !== "/apply-doctor" && auth.role === "patient" && auth.user?.user_metadata?.health_setup_pending === true;
+    !doctorApplicant && redirect !== "/apply-doctor" && auth.role === "patient" && auth.user?.user_metadata?.health_setup_pending === true;
   const [setupDone, setSetupDone] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -295,11 +296,12 @@ function AuthPage() {
   useEffect(() => {
     if (!auth.session || auth.isLoading || auth.authError || (needsSetup && !setupDone)) return;
     void navigate({
-      to: redirect || (auth.role === "doctor" ? "/doctor" : "/chat"),
+      to: auth.role === "doctor" ? "/doctor" : doctorApplicant ? "/apply-doctor" : redirect || "/chat",
       replace: true,
     });
   }, [
     auth.isLoading,
+    doctorApplicant,
     auth.role,
     auth.session,
     auth.authError,
@@ -375,7 +377,8 @@ function AuthPage() {
             data: {
               role: "patient",
               full_name: fullName,
-              health_setup_pending: true,
+              health_setup_pending: !doctorSignup,
+              account_path: doctorSignup ? "doctor_applicant" : "patient",
             },
           },
         });

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
@@ -8,6 +8,11 @@ export const Route = createFileRoute("/apply-doctor")({ component: DoctorApplica
 
 function DoctorApplication() {
   const { user, role } = useAuth();
+  useEffect(() => {
+    if (user && role !== "doctor" && user.user_metadata?.account_path !== "doctor_applicant") {
+      void supabase.auth.updateUser({ data: { account_path: "doctor_applicant", health_setup_pending: false } });
+    }
+  }, [user, role]);
   const queryClient = useQueryClient();
   const queryKey = ["doctor-application", user?.id];
   const [saving, setSaving] = useState(false);
